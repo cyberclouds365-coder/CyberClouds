@@ -10,7 +10,15 @@ export default function GoogleAd({ slotId }) {
   }, []);
 
   return (
-  <div style={{ margin: '30px auto', textAlign: 'center', width: '100%', maxWidth: '900px' }}>
+  <div style={{ 
+      margin: '30px auto', 
+      textAlign: 'center', 
+      width: '100%', 
+      maxWidth: '900px',
+      overflow: 'hidden',        /* Ad ko div ke bahar nikalne se rokega */
+      padding: '0 10px',         /* Mobile par side se thoda gap dega */
+      boxSizing: 'border-box'    /* Padding ko width ke andar hi rakhega */
+    }}>
   <ins className="adsbygoogle"
        style={{ display: 'block' }}
        data-ad-client="ca-pub-6049871133505813" // Apni ID yahan daal di
