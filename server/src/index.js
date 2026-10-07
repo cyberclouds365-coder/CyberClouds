@@ -1102,7 +1102,9 @@ async function start() {
   }
 
 
-
+app.get('/', (req, res) => {
+  res.send('Server is active');
+});
   // Add this route before app.listen()
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
