@@ -1,0 +1,9 @@
+[build]
+  base = "client"
+  command = "test -n \"$VITE_API_URL\" || { echo 'Set VITE_API_URL in Netlify environment variables.'; exit 1; }; case \"$VITE_API_URL\" in https://*) ;; *) echo 'VITE_API_URL must be an HTTPS URL.'; exit 1 ;; esac; npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

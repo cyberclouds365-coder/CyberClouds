@@ -1,0 +1,931 @@
+﻿SSH(22 port)
+-first servercreate the session then, both side check the version then both side genrate the tmp public and private key now both exchnage the tmp public key to each other and make a secure tunnel now server host send the some data+pribate key is called the digtial signature with the public key send to the  client  and now ask for the password .
+=>now first password send to the pam.d now pam.d check the fomrate and rulles for the passwornd and sedn to the KAF in this first kerberos chekc is this password is wrong or right from the AD(wich is for the window but using the freeipa we can manage the AD in linux) via ldap , is right then ldap give the autorization to that user and now ansible is automate this process .
+
+(keyclock for the website sso only used this)
+
+
+
+=>without server d1 want to access d2 so must have to add the your user into the d2 then and then d1 can access d2 
+
+
+=>when connection establish ssh use the symmetric encryption and before used asymmetric encryption
+
+
+=>known_hosts to find we was take whos ssh
+=>authorized_key we copy our device all user public key here 
+=>config file to store sortcuts for ssh write in that file right
+=>always you device does not have kesy so it will work using tmp keys also using private tmp key to genrate the digital signature
+
+
+
+
+Symmetric encyption
+=>means both d1 and d2 use the same encrypted key to encryte and decrypte  the data (like mixing data with key to encypte)
+
+
+
+
+Asymmetric Encryption
+=>mans both device has own public and private key and if we encrypte the data using the public key so only and only that device private key decryte the data 
+=>it’s more secure
+
+
+
+
+RSA Key
+basically RSA key is to long prime numbers and for the calculation it used the cpu more and it is used in 15 years old server so it's old method
+
+
+
+ECDSA
+=>it’s method create by us gov , and it does not use the prime number use the geometry curve to make a key small and faster then RSA and used in modern systems 
+
+
+
+ED25519 
+is more secure then both and it's used the not geometry curv but use the specifid curv method to for the key and it smaller then both and this key use the 0 cpu for encyption so good, and used in ystem,github,awsand linux for encryption
+
+
+
+
+ssh-keygen
+=>ssh-copy-id emipro@192.168.1.75  write as its for ssh 
+=>it will genrate Ed25519 key or a strong RSA key (usually RSA 3072 or 4096 bits) 
+=>for the connection establish same but there is not use the password method means this key has public key+digital signature and that send to the d2 and d2 will create one code using d1 public key and send this code to the d1 and d1 will decrepted by the private key and send now this plaincode+digital signature to the d2 and d2 verify with it and give the access to the d1 
+
+[
+ssh-keygen -t ed25519
+ssh-keygen -t rsa -b 4096
+ssh-keygen -t rsa -b 4096
+]
+
+
+
+[
+ sudo ssh-keygen -y -f ~/.ssh/id_rsa [ to see the public is in private id
+]
+
+
+
+
+
+
+
+Config file in /.ssh
+=>it is used to create a softcut when we access the any user ssh
+-below write the victime info ok
+[
+Host rc
+    HostName IP or my_hostname
+    User my_username
+    IdentityFile ~/.ssh/id_db_key
+    ProxyCommand ssh -W %h:%p bastion
+]
+
+
+-for the private server use following
+[
+Host rc
+    HostName IP or my_hostname
+    User my_username
+    IdentityFile ~/.ssh/id_db_key
+    ProxyJump   my_hostname
+]
+
+
+
+ssh-agent
+means it will store the our keys tmp in the ssh-agent and load this file into the ram and from these file ram load the keys in the ram and establish the connection
+
+
+ssh-agent forwording
+=>when d1 send the d2 ssh-connection and we say we create the secure tunnle for this connection the secure connection is create by this file in the server 
+
+sshd_config(/etc/ssh/sshd_config)
+=>in this file we can set the purmisison about the ssh
+-learn PermitRootLogin in-depth
+=>means we can set this as no means not root can not able to do ssh but other user can do ,but hacker access our system but it can not take ssh from root need a other user password so we can secure this system
+
+-learn PasswordAuthentication in-depth
+=>is we set as no mean now we can’t see the password things directly using keys we can do the ssh
+
+-learn PubkeyAuthentication in-depth
+if we set this as yes means now using the keys we can able to do the ssh
+
+-learn AllowUsers / DenyUsers in-depth
+if the user is allow then can do ssh if not then can not do ssh
+
+-learn Port in-depth
+we can change the port so user can not able to guss in which port the ssh is
+
+-leant protocall
+=>means we used the new version of the ssh(ssh 2.0) it’s more secure then ssh1 
+
+
+
+
+
+
+known_hosts file and host key verification
+=>means we have successfull connecte to the ssh of d2 but after this connection if it will send somthing and when the d1 vefify the digital signature or the public key if it will not match then ssh-client will stop the connection and give a error like identify is changed 
+
+
+
+
+
+
+
+
+
+
+
+SSH verbose/debug mode (-v, -vv, -vvv)
+-means -v to see the basic connection imfomraion
+
+-vv to see which keys opena nd whic keys authneticate which keys are close like this
+
+-vvv to see the deep about the connection with errors and broken pipe
+
+
+
+Git Architecture
+    • what is staging area and how it's works
+process of github
+    • genrate PAT : when we push we not need to type password we can use this to authenticate for all repo
+    • create a repo in the github website
+    • now create a new folder in our system and go to there
+    • git init : create a empty git repo in our project folder(which track the logs,save the data locally and manage the repo locally in .git folder )
+    • git config user.name "name"  & git config user.email "email" : without this step we can not specify the account or we can not push or commit in our repo
+    • git add . : means save the currunte folder in stagin are(in .git folder)
+    • git commit -m "First commit from Ubuntu" : means for storing this in to git repo we need to commit wih message
+    • git branch -M main : it will rename default branch name to main 
+        OR
+    • git checkout -b my_brnach : if you want to push work in specific branch so create a new branch 
+    • git remote add origin https://github.com/your-username/my-ubuntu-project.git : this connecte the our this folder in to git hub website
+    • git push -u origin branch_name : to push a final work in the github website [ here orogin is nickname of our url so we not need to write always url just type origin]
+
+
+after all above things for next time 	perform only this following commands
+    • git add .
+    • git commit -m "new_commit"
+    • git push origin branch_name
+
+when our project folder delete from our system then use following steps
+    • git clone <url> : downlod the our created repo from github
+    • git config user.name and user.email 
+    • git add .
+    • git commit -m "new_commit"
+    • git push origin branch_name
+
+PAT has expiary date so most user use the ssh keys for git(also here is simple to PAT)
+    • ssh-keygen -t ed25519 -C "your-github-email@example.com"(copy this pub key in git ssh page)
+    • first fo to github setting->SSH andGPG keys->new SSH key ->type note->create
+    • go to our project folder in system
+    • git remote add origin git@github.com:username/kishan_test1.git
+    • git add .
+    • git commit -m "message"
+    • git push -u origin branch_name
+    • git remote -v  (check is we used the ssh key or PAT for push the work in github)
+
+commands
+    • git status = will gives the information about stagin area
+    • git logs = see the all commit logs of the local .git folder
+    • git diff  = how many lines added or delete in last commit file/code like before we have kishan now we add kishan sadhu so it will highlight the things 
+    • git show id(get using git log) = see the perticuler comminte changes 
+    • git blame os.dbt = here we can see line by line log where we changes this with commite id
+
+
+Linux file permission model (owner/group/other)
+    • fist what the permission model
+    • how many  type of permission we can assing to user,group or other
+    • drwxr-x---
+           -here d(folder) , rwx(owner permission) ,  r-x(group permission)  , ---(other permission)
+
+
+chmod symbolic vs numeric (octal) notation
+    • chmod u+x script.sh     :     Add execute permission for the owner.
+    • chmod g-w report.txt  :    Remove write permission for the group.
+    • chmod o=r photo.jpg   :   Set others to read-only (removes write/execute if they had it).
+    • numeric means we have to set the permission for ( chmod 700  -> here 7(user)  , 0(group) , 0(other)  ) following
+                 -4(read) , 2(write) , 1 (exicute) , 0 (no permission) using this we can set the 7 or based on need
+                -symbolic(chmod u=rwx,g=rx,o=r myfile.txt)    octal(chmod 754 myfile.txt)
+
+
+chown & chmod
+    • first we can see the user (cat etc/passwd ) and see the groups using(cat etc/group)
+    • using chown to change the owner of the file/folder (chown user:group folder)
+    • using chmod to change the permission of the files/directory (chmod 700 file_name)
+
+
+
+SUID(if the in any file which has r and exicute permission in these files work the sudo)
+    • when we create a new file it does not have SUID means to excute this file as root but when we set the permssion of SUID now any normal user no neet to run that file as root it will run without root becuase this file in bg run as root,so it will help to normal user
+    • when the file has read & exicutable permission to user,grop,other then and the SUID works right is not exicutable then permission set but not work the SUID proparly
+    • also we can change the commands permison as suid using chmod(symobol(u+s)   for octal chmod 4000 file)
+    • also is in permisson (rws ->here s means this file is exicutable and have suid permission) & capital S means the SUID is set but broken means we can’t do anything
+    • must khow if your that file is in folder also shold have read and exicutable permission then suid work on that 
+
+SGID
+      
+    • means first we create the one group name is work now in this group we add the users now create the one new_folder in owner user now from this we give the own of this folder to work(group) means now if switch from my to other user now if that user in the work group can able to do in the new_folder based on permission if all do if the SGID set if not set then you create file so it wll not see in this group see in that user own group 
+    • when the folder has exicutable permission to user,grop,other then and the SGIDworks right is not exicutable then permission set but not work the SGID proparly
+
+    • we can see that using the (rwxrwsrwx ->here s means all group  of this system work here but based on seted purmission )
+
+
+
+
+
+ACLs (Access Control Lists) (getfacl, setfacl) vs standard permission
+    • standard permission we can set the permission like chmod 750 file means other all users can not do anything so for that problem overcome we can used the ACLs(Access Control Lists)
+    • setfacl -m u:kishan:rw,u:sadhu:rw test   [to set the permission for the users ]
+    • getfacl folde/file_name   [here to see the permission  list ]
+
+
+etc/passwd, /etc/group, /etc/shadow structure
+    • cat etc/passwd = here we can see the list of total users in system
+             name : passwd stored enrcrypted : user id : group id : location of this user : commnd_perform_from_this_location
+    • cat etc/group =here we can see the list of all groups
+            group_name : password_placeholder : group_id : user_list
+    • cat /etc/shadow  = here we can see the all users encypted password  
+           user_name : encrypted pass : more information(like expiry.....)
+
+
+
+rm -f ~/.local/share/keyrings/login.keyring
+    • means my password use the sso so when we restart the system after changing the password [passwd ] we need to enter new password in ssh,wifi and when open the chrom if we not delete the old key ring so it will not autheticate the new password 
+
+
+
+
+
+
+
+Local port forwording
+means when we need to access the our server which is in our commnay then used this to access the any local server 
+ssh -L 8080:localhost:3306  kishanms@ip
+[here in my 8080 port i can see that database via gui and terminal and in server this is run in 3306]
+now i can opent the browser and see the site [http:localhost/server_ip based on need:8080] 
+=>if the user perfomr this commands then and then they can access the server files remotryl wiout not
+
+
+
+Remote Port Forwording
+means we need to share my work to server so inside netowork and outide the network any one can see the website  using(http://server_ip:my_port) from office andalso frome my home
+in my terminal write( ssh -R 0.0.0.0:8080:127.0.0.1:5000 kishanms@192.168.1.75)
+s1). We have project,database.... in server
+s2).then start in server  [python3 -m http.server 3000 –bind 0.0.0.0] ->–bind 0.0.0.0 means averone can see this site ,-m means http.server module 
+s3).now run this commands on my laptop [sh -R 8080:localhost:4000 server@server_ip public/private ip based on need]
+s4).now i can opent the browser and see the site [http:localhost/server_ip based on need:8080] 
+
+=>when we used this always focuese on port
+
+here 8080:localhost:4000 means open site in 8080 in other user and 4000 my port which point to 8080
+
+8080 port	
+means it's tmp port to see the website locally no need root permission but below 1024 in all port need a root password then you can access this port
+
+
+
+
+
+Dynamic port Forwarding
+means we can access the diffrent port site on single port in our system,but once open this port then now we can access the sites with actuall port number 
+ssh -D 1028 kishanms@­server_public/privet ip  based on need
+
+
+=>and server identify me via my public key 
+
+SSH multiplexing (ControlMaster, ControlPath, ControlPersist)
+    • controll master means when am i connecte one time with server then then it will khow me no need to verify next time
+    • contoll path : it will identify me so no my public keys chekcs
+    • controll persistance means keep this connection alive for few seconds so if you terminate ssh and type next to instantly reach at same point 
+    • all this work if you set this in this config file(sortcut file) is not then not work
+(in .ssh/config)
+Host *
+    ControlMaster auto
+    ControlPath ~/.ssh/ssh-%r@%h:%p
+    ControlPersist 10m
+
+
+SSH banner and MOTD
+    • banner like "Authorized Users Only! Hackers will be prosecuted." before login
+    • MOTD means A message that pops up AFTER you successfully log in. like some information of that user
+
+
+fail2ban
+    • fail2ban is software than continusely moniter the ssh password attepts after some attepts it will block that user ip and lock the account for some time
+ssh certification based authentication
+    • means when we have a 50 server so in 50 server we need to savethe public key of all users and it's very complicated so we used the ca certificate which same certificate insatll in all server and when anyone access server it wil authenticate by using the ca(with them digital signature give all device samedigital signature ) and give the uniqe tmp id for some time when the id expire connection terminate 
+
+
+ssh errors what i was faced
+    • password authentication failed
+    • public key and private key not match
+    • ssh connection failed
+    • you may not have permission to access this device
+    • port forwrding errors mean when the port are diffrent then this error will occure
+
+
+
+
+scp(scp flag kishanms@ip_of_reciver:/location_of_the_reciver_to_recive_file)
+    • means scp nothing but over the ssh we can copy one file from my comuter to sedn the other computer when ssh connecte it's fast(slower then rsync) but we can not pause , or append or update somthing during tramission of small files for huge file we used the rsync(it's old so may be hacker can do somthing not final but can do )
+    • -r   :-   means we can send the folder(not file) with inside tree (means folder inside folder also subfolder we can send at time)
+    • -p :-    mean it will send the file with time stamp of that exat time stamp with file send to other user and that user can see exact my time stamp file
+    • -C :-     first our cpu convert in to zip and during tranmisison looks like zeep when reach at dest then them cpu will de-commpress and save them location but it will use more cpu
+    • -l  :-      when we send the hugu amout file at that time it will use the whole speed or internate so many other user get low speed so we can set the manuall speed for sending (8000 = 1MB/sec)
+
+
+
+SFTP(here we can use the same flags as scp)
+    • it's modern way to send the file/fodler over ssh ,not trick by hakcer it is secure
+    • smtp kishanms@kishanms_ip (from emipro i wil send)
+    • >cd file_location kishams
+    • >put  -r /home/emipro/folder
+
+
+/home/emipro/myfolder /kishanms@192.168.1.153:/home/kishanms/
+    • if myfolder/ means all things directly put in the kishanms folder not create first myfolder then put all
+    • if myfolder then first in the kishanm/ create folder myfolder and then put the content inside that
+
+
+
+
+rsync
+    • it is work over a ssh also other way we can,but more faster  then scp and sftp,also we can pause, resume/update at same time(first i have 500 files and send to the user and at 499 file i will stop then in same palce i was create more files so it will check we have done 499 now from 500-end  send to user)
+    • delta-transfer work on ssh , when i am first time sending file there is no id ,but when we from emipro stop(not exit this connection) and resume then this algo will convert the whole data into chunks and give the whole chinks and give all chunks to uniq  id now it is load in kishnms ram and kishanms send this id list to emipro and nowhow emipro also device them data into chunks give these id from the first chunks so it will have sequnce wise chunk so no error will occure and now send this data to kishams and it will match the id yes then drop this new id then strore in to kishanms right
+    • -a  :-  means copy the folder,subfolder,files all with same stemp send ,permissions to kishanms 
+    • -v   :-  print the files on screen what we are transfer
+    • -z   :-  in cpu converted into zip so we can send more faster,also de-compress at receiver side 
+    • --progress :-  it's print the actual speed,%  ,chunks remaining
+    • --partial :- means if we stop here,at this point the algo work and this flag will start from where we stop last time(checkpoint)
+    • --delete :- what we delete from this folder it will print on screen ,and this wil not send 
+    • 
+      
+      
+
+
+
+
+
+rsync over SSH (-e ssh)
+rsync daemon mode vs SSH mode
+rsync exit codes and troubleshooting
+
+
+
+
+
+
+
+When we need to open the files in the file manager in
+1).ubuntu to ubuntu
+=>in mystem go to oter location ther at the last there is connect to server  : sftp://remote_username@remote_ip
+
+=>now we can see them folder in our system
+
+
+	
+
+2).window to window 
+=>frist in the folder share this now in other system go compuet local network type the \\ip\folder name  now you can access that folder there ok 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Battery Helth
+1).how to check the battery as power source
+    • upower -e 
+    • this command scan the whole system power source like battery,charger,mic ...
+    • we need to see output for battery like   (/org/freedesktop/UPower/devices/battery_BAT0)  
+
+
+2).how to get the information about the battery
+    • upower -i  /org/freedesktop/UPower/devices/battery_BAT0 
+    • here BAT0 / BAT1 is battery and this commands will find the information about the battery ,​ if that if system battery dead so it will get directly power from board so need to perform this commands 2 or more time untile we get BAT0/BAT1 as output
+      
+      
+3). in this commnd output we need to see following
+    • capacity (34.50%):       Battery Health  
+    • percentage (55%):      Current Charge Level                      
+    • time to empty (55.7 minutes):        means after 55.7 minutes battery is 0% 
+
+
+4).how to check the battery helth is good or not
+    • 80% – 100%: Excellent condition.
+    • 50% – 79%: The battery drains faster than before, so you get less runtime per charge.
+    • Below 50%: Battery replacement required .
+
+
+5).many time it gives 100% because of hardware damage  or signal error ,so also check the things like 
+    • state: Good if charging or discharging — bad if unknown, pending-charge, or stuck on fully-charged while unplugged.
+    • energy-rate: Good if above 0 W — bad if 0 W (no power is actually moving into or out of the battery).
+    • voltage: Good if matching normal battery rating (around 10 V–14 V) — bad if extremely low or 0 V.
+
+6).
+upower -i $(upower -e | grep 'BAT') | grep -E "percentage:|capacity:|time to empty:|state:|energy-rate:|voltage:"
+
+
+
+
+
+
+
+
+
+
+
+
+2:23 100% charge in the emipro@emipro
+4:16 10%
+
+BASH scripting
+
+=>is automate your daily task , we can add the our basic automation scipt in to the .bashrc file where we can able write the our script for the commands 
+
+
+1).basic structure
+#!/bin/bash   (this means whatever we wright it will exicute in the  /bin/bash )
+echo “this is a first things “
+
+
+2).how to run this
+=>we know this file will eixcute in the bin/bash so we need to give the exicutable permisison then and then it will exicute ther
+- chmod +x one.sh
+
+=>how to run
+-./one.sh  (to see output “this is a first things”)
+
+
+
+3).create a variables
+#!/bin/bash
+
+NAME=”kishaa”
+Roll_no=29
+
+echo -e  “Name :  $NAME \n”     (here -e means use the escape character like \n in this )
+echo “Roll no : $Roll_no “
+
+
+4).taking a input
+!#/bin/bash
+
+echo “Enter a name :”
+read  user_name
+echo “name is : $user_name “
+
+
+5).conditional statment
+#!/bin/bash
+
+read -p "enter number : " num
+echo "your entered numer is : $num \n"
+
+GREEN="\e[32m"
+RED="\e[31m"
+YELLOW="\e[33m"
+RESET="\e[0m"
+
+if [ $num -lt 1 ]; then
+   echo -e "${RED} enter a valid number ${RESET} \n\n"
+elif [ $num -eq 18 ]; then
+   echo -e "${GREEN} your are eligible for the vott ${RESET}\n\n"
+elif [ $num -gt 18 ]; then
+   echo -e "${GREEN} your are eligible for the vott ${RESET}\n\n"
+else
+   echo -e "${YELLOW} you are not eligible for the ${RESET}\n\n"
+fi
+
+
+
+
+6).for loop
+for k in {1..10} ; do
+   echo "$k"
+done
+
+
+for k in {a..e} ; do
+   echo "$k"
+done
+
+
+for k in kishan raj ; do
+   echo "this is $k "
+done
+
+
+
+7).while loop
+#!/bin/bash
+
+cou=1
+while [ $cou -lt 4 ] ; do
+    echo “$cou”
+    ((cou++))
+
+done
+
+
+
+
+
+
+
+
+
+
+
+
+
+8).function
+
+!#/bin/bash
+#here the $1 is need because it's print the function values
+fun() {
+   echo "hello ,$1"
+}
+
+fun "kishan"
+fun "raj"
+
+
+
+
+
+
+
+
+
+
+where the ldap,keyclock,kerberos , ansible , freeipa lives and what are these
+LDAP  : it’s protocal and inside the AD or FREEIP
+kerberos  :  it’s protcall and lived inside AD/FREEIPA
+AD : it’s window server and store the employee data 
+FREEEIPA : same as AD server but specially for the linux we used this
+KEYCLCOK :  it’s a  server which is used for the website SSO
+ANSIBLE : IT’S one thing which is automate all above things together
+
+
+1). Docker Container vs V.E
+    • Virchual environemnt :it's private place for the pythonna and used for pyton
+    • Docker Container : which is create the privte environemt , where we test/pr	oduction of the server , os , databse , python for used this
+(here we used docker for the keyclock with SAML / OIDC SSO)
+
+
+2).keycloak = it’s the entrpriz level server or software (the simple user can not do because admin account allows the any site sso from that site admin account like google....  , they can access the keyclok credential form for sso , one time untile session end )  which is used for the website SSO over the internate , it is used the PROTOCALLs like OIDC and samal for the sso based on need .in this software we have option Federation to connecte the AD using ldap or kerberos 
+
+OIDC = WHICH USED THE JWT iN KEYCLOAK (authentication)
+SAML = USED THE XML CODE iN KEYCLOAK (authentication)
+auth 2.0 = used for the authorization in the keycloak
+
+3).
+Active Directory & Keycloak = Identity Provider (IdP) Because they store your user credentials, manage your password, and perform the authentication.
+
+Your Company’s Applications / Systems = Service Provider (SP) Because they are the websites or systems you actually want to use. They don't check your password directly—they trust Keycloak to verify you and let you in.
+
+
+4).jwt Tocken
+formate ( header.payload.signature)
+    • header : means which algorithm used ,which create the signature at atetication time it will identify from the header and then verify the signature 
+    • payload: actuall data of the this (like emial and username, session start / expiration info)
+    • signature : it’s just like digital signature which to identify who is that or what
+
+
+5).JWT AUTHENTICATION
+when we login in to the keycloak user page for website sso now , that data will come back to keycloak and it will genrate the JWT and create the session inside the keycloak and now keyclock  send JWT to the gemini(or site) for  user authentication (via OIDC) now user will login without any password so this is the authentication method for the JWT 
+
+
+6).MFA
+before creating session and sending the JWT to site ,in user login screen of kycloack will vefiry this use via OTP or code method it's called the MFA
+
+
+
+
+
+
+7).SLO
+when we logout the user from one site or all sites so it will destory the session at keycloak but stile is valid in the site untile expire, and many time that site down so it will actually login in to that site but in keyclock we see that user is logout  , only those resion to it is harder  (so set access tocket time sorter and refress tockent time longer so resolve all problems)
+
+	
+
+	
+
+
+Federation Trust
+    • Metadata Exchange:
+      Think of metadata as a digital handshake between Keycloak and an application (like Google Workspace or AWS). Both sides exchange a simple setup file containing their URLs and public keys so they know how to talk to each other securely.
+    • Certificate Rotation:
+      The digital keys used to sign SSO messages expire over time for security reasons. Certificate rotation is simply updating these keys with new ones every 1–2 years so the trust stays active and secure.
+
+
+Common SSO Attack Vectors
+      Token Replay Attack:
+    • An attacker steals a valid, active login token (like a concert ticket) and presents it to the server. Because the token itself is legitimate, the system lets the attacker in without asking for a password or MFA. 
+    • (use the sort life of JWT to reduce this attack)
+    • Realm Settings $\rightarrow$ Set Token Lifespan to 5 mins + Enable Revoke Refresh Token.
+      
+      XML Signature Wrapping (XSW) in SAML:
+    • SAML login messages use XML formatted text. In an XSW attack, the attacker takes a valid, signed SAML message, moves the real signed part to the bottom, and inserts a fake admin user part at the top. The server verifies the real signature at the bottom but logs the user in using the fake identity at the top.
+    • (used more validation in this to reduce this things)
+    • SAML Client Settings $\rightarrow$ Turn ON Sign Assertions and Sign Documents.
+      
+
+
+
+
+
+
+
+
+
+Concept	Simple Definition	Example
+Metadata	Configuration file sharing URLs and Security Keys.	keycloak-metadata.xml
+ACS URL	The target URL where the app receives SAML login tokens.	[https://www.google.com/a/yourdomain.com/acs](https://www.google.com/a/yourdomain.com/acs)
+Attribute Mapping	Linking Keycloak user data to the app's required field names.	user.email $\rightarrow$ User.EmailAddress
+
+
+
+
+
+Hosting SITE requiremnt
+1).When we build the site using any programming languge
+
+
+
+2).by the domain name without hosting , now 
+
+
+
+
+3).DNS record
+    • here type the server public address(curl ifconfig.me) where the wesbite code is (provide by ISP)
+    • if change the server isp the change the dns record there
+
+
+
+4).CNAME
+    • we add the cname which will redirect the entered url means ,if we add the CNAME www and vaue is mydomain.com, now www.mydomain.com will redect tot the mydomain.com  
+    • also we can set multiple subdomain redirects
+
+
+
+
+5).subdomain 
+for the our sites or more thing we can used this 
+
+
+
+
+6). what is nginx
+    • when we devlop the site so it will used in the server for the security perpouse 
+    • without this we need to open the each  page with the port(router) number it will complex and  unsecure  , it will handle by this
+    • this will install the ssl/tls certificate which we purchased for site ,for the incrption of each requste
+    • it will distribute the traffice in diffrent server based on code 
+
+
+
+
+
+
+
+
+SSSD
+Ubuntu speaks native Linux protocols, and Active Directory speaks native Windows protocols.
+Ubuntu cannot talk to Active Directory on its own, so SSSD acts as the translator and bridge.
+
+SSSD drift playbook may have stopped on system(zabbix error) , this errros i was seee in the zabbix means my sssd service is not start so i can not able to login into system or not communcation with AD right , if my network or system is off then also that not works
+
+
+
+fail2ban file 
+etc/security/faillock.conf   not always but need to check when problem occure 
+
+
+
+
+
+
+
+
+
+
+
+Wiregurd(based on UDP)
+    • wiregurd is VPN(more faster then other vpn) wich connecte the device secure over internate to access the files...
+    • it’s software run in all os 
+    • first install the wiregurd in office laptop server and our home laptop , at both side genrate key now when need to copy both public key in each other(means exchange key manuallly) , now when we click active in laptop now it will connected to the 
+    • now over this secure tunnle we need to identify which netowrk we need to used so give the public_ip_of_that_pc_which_is_default_isp_ip:wiregurd_port_lision_in_system of compney system (this set in my home wiregurd ENDPOINT)
+    • also set the file sharing in compney laptop then and then home laptop can access the files securly and in home laptop type that   laptop_ip in file manager
+    • To prevent your home router or firewall from closing the connection while idle, you should add PersistentKeepalive = 25 to the Home Laptop's config.
+
+
+ 
+# --- HOME LAPTOP CONFIG (Client) ---
+[Interface]
+PrivateKey = <Home_Private_Key>
+Address = 10.0.0.2/24              # Home laptop's VPN IP
+
+[Peer]
+PublicKey = <Office_Public_Key>
+Endpoint = 203.0.113.45:51820      # Office Public IP and Port
+AllowedIPs = 10.0.0.1/32           # Office laptop's VPN IP
+PersistentKeepalive = 25 # <--- ADD THIS LINE HERE
+
+# --- OFFICE LAPTOP CONFIG (Server) ---
+[Interface]
+PrivateKey = <Office_Private_Key>
+Address = 10.0.0.1/24              # Office laptop's VPN IP
+ListenPort = 51820                 # Port WireGuard listens on
+
+[Peer]
+PublicKey = <Home_Public_Key>
+AllowedIPs = 10.0.0.2/32           # Home laptop's VPN IP
+
+
+
+
+fulltunneling and split tunneling
+fulltunneling = means when  we connecte the our compney vpn to the our home system then first out system all traffice goes to the office vpn server(to secure the our ip) then after  it will send to the outside the office netowork 
+[Peer] 
+AllowedIPs = 0.0.0.0/0
+
+
+spilittunneling = means we connecte the our office vpn to the home now only spefic traffice send to the office vpn server ,but the site like other which works on our own local home network 
+[Peer] 
+AllowedIPs =10.0.0.0/24
+
+	
+
+Dropped/Stale Tunnel
+means when we connnection is successfully but after some time if we change the our home netowkr then  it will drop the pacekts to reach at home network so it will dropped the tunnel 
+so we can set the 
+[Peer]
+...
+PersistentKeepalive = 25 (each 25 second the vpn server send the ping requste to continus the connection without break , and it will solve this probelm
+
+
+
+
+
+ restart-on-network-change logic,
+means when we change the network of home device then vpn server automatically identify this vpn tunnetle chnage the network and re send the connection packerts so continuesly used the vpn connection also there this PersistentKeepalive = 25 help us to send the ping packet every 25 second after  
+
+
+
+Restart Loop Pitfalls 
+means the vpn is restart,discoonecnecte continuesly this happen now the vpn pacekts are in the loops because of in config file we set the dns as domain name so the packet are confuse what exacly is this so it will goes into the loop so always set the public address instead of domain name so packets not get confused 
+
+
+
+Handshke age
+lastly when they excange the keys with each other means it show recetly when they exchange the keys with each other
+
+traffice status
+means how much data was send the recives and dowlod somting all the data we can see here
+
+peer status
+which connection is currnetly ahere and what is the ip adress of them we can see there 
+
+
+
+
+
+
+
+
+
+
+
+
+whiteliating 
+simple means we have list inside listed users can used this perticuler service likeip,allication,url,email right100%
+
+
+
+
+
+
+
+
+
+
+
+
+
+test the keyclock sso 
+1).go to keyclokc and create a cline using OIDC and 
+reditect ur l : https://oidcdebugger.com/debug
+web orgin : https://oidcdebugger.com
+client id :  oidc-test-client
+
+
+2).go to the https://oidcdebugger.com/
+-authorized url : http://localhost:7777/realms/emipro/protocol/openid-connect/auth
+-redirect url : https://oidcdebugger.com/debug
+-id :  oidc-test-client
+-form_post
+
+->now submit and we can see the keyclock login page to login and now it’s become SSO
+
+
+wiregurd 4000line code (statles previos requeste can not remember always treat as new )
+    • it’s a vpn which connecte the devices from office to home also vise-varsa
+    • it’s run in the linux kernal so it’s very faster then other
+    • wiregurd have public key and private key now we need to copy both device public key to each other for the connection with each other 
+    • after connection vpn at reciver site in file manager we need type the ip_address
+    • it’s support the udp means connection less and more faster
+    • it’s 4000 code so we can find vulerability and bug in simple way compare to the ipsec and opevpn
+    • 
+
+
+=>ipsec(udp) and  openvpn(udp ,tcp) but used more cpu compare to wiregurd
+
+
+
+
+
+
+
+why user can not able to access sudo
+1).when the user is not in sudo group
+a).error
+sudo su
+test is not in the sudoers file.  This incident will be reported.
+
+b).how to resolve this error
+=>first go to admin account and there set the permission
+-sudo adduser test sudo
+=>now test user can able to access the sudo 
+
+
+
+2).when the user is disanle from the sudoers file( /etc/sudoers.tmp   run in ring 0)
+=>if you are in sudo group but this set then still we can not access the sudo 
+=>in this file we can set the perticuler commands permissions without sudo for tmp,and we can see this things using  sudo -l
+
+a).how to set in this in user
+sudo visudo or sudo nano etc/sudoers.tmp
+-test ALL=(ALL) !ALL   (to block all sudo commands for the test user)
+-(root) /usr/sbin/dmidecode -s system-serial-number  = means allow only this block other sudo things to this user 
+
+b).error
+sudo su
+Sorry, user test is not allowed to execute '/usr/bin/su' as root on bastion.emiprotechnologies.local.
+
+c).how to resolve (to comment this line)
+sudo visudo 
+#test ALL=(ALL) ALL, !/usr/bin/su, !/bin/bash, !/bin/sh (means disable the user to exicute the sudo binary file and bash file )
+
+
+
+
+
+
+
+
+https://sso.emiprotechnologies.com/
+
+
+
+
+export PATH=/home/kishanms/test/node-v20.11.1-linux-x64/bin:$PATH
+
+export JAVA_HOME=$(ls -d /home/kishanms/test/jdk-17.0.10+7)
+
+export PATH=$JAVA_HOME/bin:$PATH
+
+export KEYCLOAK_ADMIN=admin
+
+export KEYCLOAK_ADMIN_PASSWORD=<REDACTED>
+
+
+./keycloak-24.0.1/bin/kc.sh start-dev --http-port=7777
+
+
+Whitelisting
+
+labs.play-with-docker.com  docker testing of the AD AND keyclock in that site
+

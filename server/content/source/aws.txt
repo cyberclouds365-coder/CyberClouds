@@ -1,0 +1,33 @@
+﻿AWS
+it’s web platform it’s provde the server,os,hdd,sdd and many of the resources virtually , it will replac the traditional method also aws provide the  resource pasy-as-you-use .
+
+
+
+
+
+EC2 instance
+it’s virtuall server and act as remote computer which has own cpu,ram,sdd,and os  ,we can rent this server for hourseor long term means pay-as-we-used
+
+
+
+
+
+AMI (amazon machine image) => means it’s have all thigs which need to launch the instance 
+it’s premade tamplate containing os,software and setting used to launch the instance 
+
+
+
+
+
+EBS(it does not store the instance)
+it’s virtuall hdd of EC2 instance  which store the files,database,storage and os  parmanatly ,even server is restart or stopped
+
+
+
+
+volume in EBS
+it’s high performace hard drive(hdd,ssd) which attach with the instacne to store the file,databse and os of the EC2 instance 
+
+
+
+

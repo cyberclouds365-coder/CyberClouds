@@ -1,0 +1,124 @@
+.source-heading{color:#194f94}
+.source-subheading{margin:26px 0 10px;padding:0 0 7px;border-bottom:1px solid #dcecf0;color:#258197;font-size:16px;line-height:1.45;letter-spacing:-.15px;scroll-margin-top:18px}
+.source-numbered .bullet-marker{position:static;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;min-width:20px;padding:0;border:0;border-radius:0;background:transparent;color:#397c92;font:10px var(--mono);}
+.source-numbered .bullet-marker:after{content:none}
+.source-descriptions{list-style:none;padding:2px 0 8px 3px;margin:0 0 12px}
+.source-descriptions li{grid-template-columns:25px minmax(0,1fr);gap:7px;padding:3px 0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.source-descriptions .bullet-marker{justify-content:flex-start;color:#8094a6}
+.admin-content-preview{margin-top:19px;overflow:hidden;border:1px solid #dce7f1;border-radius:5px;background:#fff}
+.admin-content-preview-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:13px 16px;border-bottom:1px solid #e6edf5;background:#f8fbfe}
+.admin-content-preview-head h3{margin:5px 0 0;color:#29486b;font-size:13px}
+.admin-content-preview .source-reading-layout{border:0}
+.admin-content-preview .source-blocks{padding-top:10px}
+.admin-content-preview .reading-end{padding-top:10px}
+.admin-diagram-preview{display:grid;place-items:center;min-height:220px;padding:18px;background:#f7fafc}
+.admin-diagram-preview img{display:block;max-width:100%;max-height:560px;object-fit:contain}
+.editor-hint{margin-top:-5px;color:#8293a7;font-size:9px;line-height:1.7}
+.editor-hint code{padding:2px 4px;border-radius:3px;background:#edf4fb;color:#315b85;font:9px var(--mono)}
+@media(max-width:700px){.source-subheading{font-size:14px}.admin-content-preview-head{padding:11px}.admin-content-preview .source-blocks{padding-top:7px}.source-descriptions li{grid-template-columns:21px minmax(0,1fr);gap:6px}}
+
+/* Consistent topic, bullet, and terminal presentation for every text module. */
+.source-heading{
+  margin:34px 0 15px;
+  padding:12px 15px 13px;
+  border:1px solid #dce7f2;
+  border-left:4px solid #3286ad;
+  border-radius:5px;
+  background:linear-gradient(100deg,#edf4fb 0%,#f7faff 76%,#fff 100%);
+  color:#142b47;
+  font-size:25px;
+  font-weight:800;
+  line-height:1.35;
+  letter-spacing:-.45px;
+}
+.source-heading:first-child{margin-top:8px}
+.source-subheading{
+  margin:25px 0 8px;
+  padding:0 0 6px 10px;
+  border:0;
+  border-bottom:1px solid #e2eaf2;
+  border-left:2px solid #58a9bd;
+  border-radius:0;
+  color:#203b5a;
+  font-size:18px;
+  font-weight:750;
+  line-height:1.45;
+}
+.source-bullets{
+  gap:3px;
+  padding:2px 0 8px 2px;
+  margin-bottom:9px;
+}
+.source-bullets li{
+  grid-template-columns:12px minmax(0,1fr);
+  gap:9px;
+  padding:5px 2px;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:#3d536d;
+  font-size:14px;
+  line-height:1.8;
+}
+.bullet-marker{
+  position:relative;
+  top:10px;
+  width:6px;
+  height:6px;
+  min-width:6px;
+  padding:0;
+  border:0;
+  border-radius:50%;
+  background:#3286ad;
+}
+.bullet-marker:after{content:none}
+.source-command-card{
+  overflow:hidden;
+  margin:10px 0 19px;
+  border:1px solid #1e3c5d;
+  border-radius:6px;
+  background:#10243a;
+  box-shadow:0 7px 20px #173d621c;
+}
+.source-command-label{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:35px;
+  padding:0 13px;
+  border-bottom:1px solid #ffffff12;
+  background:#172f49;
+  color:#9db9d6;
+  font:9px var(--mono);
+  letter-spacing:.45px;
+}
+.source-command-label svg{color:#54c1cf}
+.source-command-shell{
+  margin-left:auto;
+  color:#7391af;
+  font-size:8px;
+}
+.source-command{
+  margin:0;
+  padding:13px 16px 15px;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:#e5f0fc;
+  font:12px/1.9 var(--mono);
+  box-shadow:none;
+  tab-size:4;
+}
+.source-command code{display:grid;gap:2px;white-space:inherit}
+.source-command-line{display:block;min-width:max-content}
+.source-command-text{color:#eff6ff}
+.source-command-comment{padding-left:14px;color:#83c99c}
+.source-command-comment span{color:#5ea978}
+.source-table-wrap{border-color:#dce6f0;border-radius:5px}
+@media(max-width:700px){
+  .source-heading{margin-top:27px;padding:10px 11px;font-size:21px}
+  .source-subheading{font-size:16px}
+  .source-bullets li{grid-template-columns:10px minmax(0,1fr);gap:8px;padding:5px 1px;font-size:13px}
+  .source-command{padding:11px 12px;font-size:10px}
+  .source-command-comment{padding-left:9px}
+}

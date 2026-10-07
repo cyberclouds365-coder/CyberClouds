@@ -1,0 +1,443 @@
+==============================================================================================================================================================
+==============================================================================  Basic Commands  ==============================================================
+==============================================================================================================================================================
+
+hostname  -  for the username
+
+hostnamectl  -  to see user system information
+
+whoami   -  hostname
+
+date 
+
+timedatectl  -  to see the timezon with the date time
+
+uptime  -  to see the uptime and time and currunte how many users login in this system
+
+id  -  to see my linux id and in which group am i , we can see here
+
+groups user_name  -  to see specefic users groups of system
+
+rm -rf  folder_name  :  to remove tree structure of folder 
+
+rm file_name
+
+
+
+==============================================================================================================================================================
+==============================================================================  Instalation Commands  ========================================================
+==============================================================================================================================================================
+sudo apt install name
+
+sudo apt auto-remove  :  to remove tmp file which comes from the downlod
+
+sudo apt perge software  :  to permanatly remove software
+
+wget site_name  :  to downlod the data from the site
+
+curl url  :  to test the site/API using this
+
+curl ifconfig.me  :  to see the public ip of system/ISP
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  Service Commands  ============================================================      
+==============================================================================================================================================================
+
+sudo systemctl status servicename
+
+sudo systemctl start/stop/enable/disable service name
+
+sudo systemctl demon-reload  :  when we change somthing in service file then we need to reload the files
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  File/Folder creation  ========================================================
+==============================================================================================================================================================
+
+ls 
+
+ls -la  - to see the list with hiddent data as in row fromate list
+
+mkdir directory_name  -  to create the directory
+
+touch  -  to create a empty file
+
+cat >> one.txt  :  to append content in the file
+
+cd 
+
+cd ..
+
+cd ~  :  reach to home directory
+
+tree  :  to see the tree structure 
+
+find . -name "*.txt"  :  in directrory we can search the files 
+
+less file.txt
+
+more file.txt
+
+head file.txt   ​
+
+tail file.txt
+
+tail -f /var/log/syslog
+
+nl file.txt
+
+wc -l file.txt
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  Editors  =====================================================================
+==============================================================================================================================================================
+
+nano file.txt
+
+vm one.sh 
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  Permissions  =================================================================
+==============================================================================================================================================================
+=>user , groups , other basically permission set for those
+=>4  2  1  0
+u 4  2  1  0 = (4+2+1+0) is 7
+g 4  2  1  0 = (4+2+1+0) is 7
+o 4  2  1  0 = (4+2+1+0) is 7
+
+
+
+chmod u=rwx,g=rwx,o=rwx file/directory  -  syntax way set the permissions on the files/directorys
+
+chmod 777 file/directory  -  octal way set the permissions on the files/directorys
+
+chown user:group file/direcory  -  means after changing user and group now that user and groups members can do somthing in this other can't
+
+chgrep root file/directory  -  change the only group
+
+setfacl u:kishan:rwx,u:sadhu:rwx file/directory  -  for the specific user i want to set the permisison then set using ACLS(this)
+
+getfacl  -  to see the list of permissions
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  Password   ===================================================================
+==============================================================================================================================================================
+
+passwd  -  to reset a password
+
+rm -f ~/.local/share/keyrings/login.keyring
+
+cat /etc/passwd  -  to see the total users
+
+cat /etc/group  -  to see the total groups
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  User add/del  ================================================================
+==============================================================================================================================================================
+
+sudo adduser kishan
+
+sudo deluser kishan
+
+sudo adduser kishan group_name  -  to add the user in sudo  groups 
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  CPU,RAM,SSD/HDD  =============================================================
+==============================================================================================================================================================
+
+lsblk  -  to see the parts of the ssd
+
+df -h /  -  to see the storage of the ssd
+
+du -sh  -  to see currunte directory size
+
+nproc  -  to see the core of the cpu 
+
+lscpu  -  to see the information about the cpu
+
+free -h  -  to see the ram and swap memory information
+
+lsusb  -  to see usb connected device
+
+blkid  -  to see the partions formate(like xsf or other and also see the partions id)
+
+sudo mount /dev/partiton  /mnt/myfol -  means we can move the partion in folder using mount
+
+sudo umount /mnt/my_fol  -  to unmount partition from the folder
+
+free -h  -  to see the live status of the ram
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  Read and serch  ==============================================================
+==============================================================================================================================================================
+
+find . -name '*.txt'  -  in this currunt location find the all .txt extension files
+
+grep -E "name|location" -  to search the things in the file also
+
+grep -e "name"  -  to search the name in directory sub directory of sub directory....
+
+ps aux | grep -i zabbix  -  to find the process with process name
+
+ls -la | grep ".local"  -  list of all file now pipe(|) will send output to right side and find this file/directory in the ls -la
+
+cat one.txt
+
+less one.txt
+
+more one.txt
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  Battery Info  ================================================================
+==============================================================================================================================================================
+
+upower -e  -  to see the power source list 
+
+upower -i /org/freedesktop/UPower/devices/battery_BAT0  -  to see the information about the battery
+
+upower -i $(upower -e | grep 'BAT') | grep -E "percentage:|capacity:|time to empty:|state:|energy-rate:|voltage:"    -  to see main infromation which we need to check is listed here
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  Networking  ==================================================================
+==============================================================================================================================================================
+
+ifconfig
+
+ip a  -  to see the routing table
+
+ip link  -  to see the link is up or not with the mac
+
+resolvectl status  -  to see the dns status of my network
+
+arp -e  -  to see the mac of all ip
+
+dig / nslookup  google.com  -  to see the ip of domain and also see the dns information about that domain
+
+cat /etc/hosts  -  to see the khown site is listed
+
+cat /etc/resolve.conf  -  to see the our dns server information
+
+resolvectl status  :  to see the DNS status
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  SSH  =========================================================================
+==============================================================================================================================================================
+
+
+sudo systemctl status ssh - also foe enable,disable,restart
+
+sudo systemctl demon-reload  -  when we change in the service file then we need to demon reload to update file
+
+ssh username@userip
+
+ssh -L 8080:localhost:7777 servername@serverip  -  means we want to get the server data then use this command
+
+ssh -R 8080:localhost:7777 servername@serverip  -  means we want to send the data to server then use this command
+
+ssh -D 1028 servername@serverip  -  means we want to get the whole server applicatioin,pages and sites then we used this 
+
+
+
+
+==============================================================================================================================================================
+=================================================================== Transfer data over SSH  ==================================================================
+==============================================================================================================================================================
+
+scp -rvpCl 8000 /home/emipro/ kishnms@kishanmsip:/home/kishanms/  -  it is secure but slow
+
+sftp servername@serverip
+  put -rp  /home/emipro/file (into currentu location of server )
+
+
+rsycn -avz --progress --partial --delete /home/emipro/ kishanms@kishanmsip:/home/kishanms/   :  it may rmove somthing so be care full in this commad
+
+rsycn -avz --progress --partial /home/emipro/ kishanms@kishanmsip:/home/kishanms/
+
+
+
+
+
+                                                                                                                                                                      
+==============================================================================================================================================================
+============================================================================== KAF Commands  =================================================================
+==============================================================================================================================================================
+
+klist  :  to verify our os,and priter will authenticate in the AD via kerberos
+
+getent passwd kishanms  :  to verify our user is authorized from the AD via LDAP
+
+
+
+
+==============================================================================================================================================================
+============================================================================== Logs Commands  ================================================================
+==============================================================================================================================================================
+
+journalctl
+
+journalctl -u ssh  :  to see the perticuler sevice logs
+
+dmesg  :  to  see the hardware longs
+
+cat /var/log/auth.log  :  to see the authentication logs os system
+
+
+
+==============================================================================================================================================================
+============================================================================== Compression Commands  =========================================================
+==============================================================================================================================================================
+
+tar -cvf archive.tar/archive.tar.gz folder   :   to zip the folder
+
+tar -xvf archive.tar/archive.tar.gz          :  to unzip this folder
+
+gzip file
+
+gunzip file.gz
+
+zip archive.zip file
+
+unzip archive.zip
+
+
+
+==============================================================================================================================================================
+==============================================================================  Cron Jobs  ===================================================================
+==============================================================================================================================================================
+=>cron jobs means it is default linux service used to exicute the commands or script for long time without need of human help
+
+-crontab  -e  :  to open the crontab where we set the process
+
+-crontab  -l  :  to how many crone job currently running
+
+-*/5 * * * * ~/emipro/script.sh >> ~/home/output.log 2>&1 &  :  to set the script in crone for the running for per 5 minutes
+
+
+
+
+
+
+==============================================================================================================================================================
+==================================================================  why user can not able to access sudo  ====================================================
+==============================================================================================================================================================
+1).when the user is not in sudo group
+a).error
+sudo su
+test is not in the sudoers file.  This incident will be reported.
+
+b).how to resolve this error
+=>first go to admin account and there set the permission
+-sudo adduser test sudo
+=>now test user can able to access the sudo 
+
+
+2).when the user is disanle from the sudoers file( /etc/sudoers.tmp   run in ring 0)
+=>if you are in sudo group but this set then still we can not access the sudo 
+=>in this file we can set the perticuler commands permissions without sudo for tmp,and we can see this things using  sudo -l
+
+a).how to set in this in user
+-sudo visudo or sudo nano etc/sudoers.tmp
+-test ALL=(ALL) !ALL   (to block all sudo commands for the test user)
+-(root) /usr/sbin/dmidecode -s system-serial-number  = means allow only this block other sudo things to this user 
+
+b).error
+-sudo su
+Sorry, user test is not allowed to execute '/usr/bin/su' as root on bastion.emiprotechnologies.local.
+
+c).how to resolve (to comment this line)
+-sudo visudo 
+-# test ALL=(ALL) ALL, !/usr/bin/su, !/bin/bash, !/bin/sh (means disable the user to exicute the sudo binary file and bash file )
+
+
+
+
+==============================================================================================================================================================
+==============================================================================  Git Commands  ==============================================================
+==============================================================================================================================================================
+git init  =  when we want to make the this folder as git folder 
+
+git config user.name   =   to set my git user name for push the content
+
+git config user.email  =  to set my git emial for push the content
+
+git add .   =  add the all files in the stagging are(tmp are before the commite or push )
+
+git commit -m "update"  =  sending the files from staggin to final are when we push the data 
+
+git branch  =  to see the current branch of the git
+
+git checkout kishan  =  to create a branch and shit automatically in this branch (kishan)
+
+git remoter add origin https://github.com/kishasadhu-111/my_repo.git  =  to conntet the our folder with the github for push the code using the Personal access tocken
+
+git remote set-url origin git@github.com:kishansadhu-111/my_repo.git  =  to conntet the our folder with the github for push the code using the SSH keys 
+
+git push -u origin kishan  =  push this all content in the brnach ,origin which is alise of the url which set in as remoter location 
+
+git status  =  to see the stagging area
+
+git log  =  to see the each commit log with unieq id
+
+git show unieq_id =  to see the each commint information
+
+git pull  = to get the updated data from the github to our folder
+
+git reset --hard HEAD  =  if the pull is not works then first use this commands to reset and then git pull 
+
+
+
+
+
+
+
+==============================================================================================================================================================
+==================================================================  Recover deleted file without sudo Commands  ==============================================
+==============================================================================================================================================================
+find /home/emipro/ -type f 2>/dev/null  =  this command used to find the recently delted files from the computer RAM
+
+mkdir -p ~/BackupFolder && find /home/emipro/ -type f 2>/dev/null | xargs -I {} cp {} ~/BackupFolder/  =  to copy all those files in that  folder 
+
+
+
+
+
+
+
+
+
+
+
+
+

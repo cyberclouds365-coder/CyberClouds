@@ -1,0 +1,1883 @@
+﻿
+
+Road Map
+1). Foundation / Basics: Introduction to IT, Operating Systems (Linux and Windows), and scripting/coding (like Python).
+
+
+2). Computer Networking: TCP/IP models, routing, switching, and core protocols (DNS, HTTP, HTTPS).
+
+
+3). Network Security & Firewalls: Packet analysis, firewalls, VPNs, and Intrusion Detection/Prevention Systems (IDS/IPS).
+
+
+4). Cryptography: Symmetric/asymmetric encryption, public key infrastructure (PKI), and hashing.
+
+
+5). Identity and Access Management (IAM): Multi-factor authentication (MFA), Single Sign-On (SSO), and role-based access control.
+
+
+6). Web Application Security: Understanding vulnerabilities like the OWASP Top 10 (SQL injection, XSS) and secure coding.
+
+
+7). Ethical Hacking & Penetration Testing: Vulnerability assessment, reconnaissance, exploitation tools (like Metasploit and Nmap), and reporting.
+
+
+8). Security Operations (SOC) & SIEM: Log analysis, event monitoring, threat hunting, and using platforms like Splunk or ELK.
+
+
+
+9). Incident Response & Digital Forensics: Handling security breaches, evidence gathering, malware analysis, and disaster recovery.
+
+
+
+10). Cloud Security: Securing cloud environments (AWS, Azure, GCP), IAM misconfigurations, and container security.
+
+
+
+
+
+============================================================================================================================================
+=============================================  Attackes ====================================================================================
+============================================================================================================================================
+
+
+
+
+Web Application Logic & Injection Vulnerabilities
+
+SQL Injection (SQLi)
+
+Server-Side Template Injection (SSTI)
+
+XML External Entity (XXE) Injection
+
+Insecure Deserialization
+
+Race Conditions
+
+Access Control & Authorization Flaws
+
+Broken Object Level Authorization (BOLA / IDOR)
+
+Insecure Direct Method Invocations & Function-Level Access Control
+
+Cross-Origin Resource Sharing (CORS) Misconfigurations
+
+Browser, Session & Client-Side Attacks
+
+Cross-Site Scripting (XSS)
+
+Cross-Site Request Forgery (CSRF)
+
+Man-in-the-Middle (MitM) Attacks
+
+Client-Side Logic Flaws
+
+Advanced Network & Architecture Exploits
+
+Server-Side Request Forgery (SSRF)
+
+HTTP Request Smuggling
+
+API Abuse & Insecure Direct Endpoints
+
+Cloud & Container Misconfigurations
+
+Systemic, Supply Chain & Emerging Threats
+
+Zero-Day Vulnerabilities & Exploits
+
+Supply Chain Attacks
+
+AI-Driven & Autonomous Cyber Attacks
+
+Cryptographic Failures & Weak Hashing
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+OS
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+OS 
+
+=>os is connecte the hardware and software to do somthing in the system
+
+
+
+
+kernal 
+
+=>kernal is 100% software not a hardware
+=>when we open the app so it’s need to communicate with hardware , like when we open the camera now the applicatin is send the systemcall(in build code of os) to the kernal and kernal is check we have permission to access camera for this app ,if yes then power up the camera(hardware) and take a picture [so this is senario of kernal)
+
+-also it’s allocate the ram to the process and give the process id to the process and send to the cpu
+-also manage the cpu time allcation in milisecond so all process run smoothly
+-also manage storage how to open,delete file in ssd/hdd  
+
+whenever from any  userinteface  you need to talk with hardware there is kernal used 
+
+
+
+
+
+Intrupt
+=>we called we click crome and this system call send to the kernal but not actually is 
+=>when we click any thing cpu is consider intrupt and it will stop all calculation in cpu and send this intrupt is in form of signnal and cpu is convert this in binary now send to the kernal and now kernal do somthing 
+
+-hardware talk to software is intrupt
+-software talk to hardware is system call
+
+
+
+
+CPU
+=>cpu is harware and live in the motherbord 
+=>cpu it’s calculate mathamatical things like
+[
+means it's read the whole code of any website app or game to exicute game smothhy means designer make like that fomrate we can see in over system right
+-it is calculate shape,aligment,color,text(which is first work in number like ascii value then cpu verify and conert into the text ) also scroll effecte also
+]
+=>cpu is mainly have core(means at one milisecond it is calculate processes at time)  , and each core exactly perform the one thread 
+   -nproc [to find the how many core in the cpu]
+
+cpu have 8-24 cores,one core handle 2 threades
+
+
+
+=>all the data is in form of the 0 and 1 so cpu can easily undestand no need to convert anything	
+
+
+=>when the cpu on the SMT(simentaneously multi threading) means one core handle two thread if off then on thread at time
+
+
+CPU Ring
+=>cpu has two rings for the permission vise exicution of the process
+0-ring= means it’s administratore level process exicute here
+3-ring =here basic user process like app,game,chrome.. run here 
+
+=>both will not intercept here at any cost ,if they need to switch from 0 to 3 they will move safely not directly
+
+
+
+
+page & sectore/blocks
+=>ssd/hdd has store in form of the 4-4 kb chunk called the blocks or secotres and all sectore has same size 4kb
+
+=>but in the ram we need to load the data from ssd so we need to create the structure like this so here also we have 4-4kb block to store the data is called the page and here page size may in kb,mb and gb right
+
+
+
+
+
+GPU
+=>cpu send the ascii value into the gpu and gpu conver the actuall visual of every thread which is  handles by the core or the gpu 
+
+=>these color we can see because of the screen made by red-blue-geen colors and gpu based on thread data see the reflection of the colors and shapes  
+
+gpu have 5000+ core ,one core handle the 1 thread,1 threads calculate in 5000+ core at time to see the exactly visual of app
+
+
+
+cpu processes are in the RAM
+gpu pricesses are int the VRAM
+
+
+
+RAM
+=>from the kernal ,kenral store the threade to the ram because kenal want to give the process id and assign the each thread process id so for that task it needs a space so for that we used the ram
+
+
+ROM
+=>rom is permanant memory ,it is used for BIOS/UEFI and when the computer on then rom will stop ,and when the computer is in boot process then ram up­
+=>BIOS is like my currunt os , date time many setting for the os is there
+=>all those things stroe in the CMOS 
+
+process
+=>combination of thread is process like website is process
+
+
+
+thread
+=>inside process we have code,click,movement are the threades 
+kernal identify which things become a thread and next thread
+
+
+
+
+--- actual concept/home/kishanms/.config/google-chrome/Default of the os ----
+without internate
+when we need to open the app first it's tell to the kernal for the hardware commiication and keral check for this app we have permission to acess ayharware like camera .. ,but the hardware like cpu,ram,gpu,vram neccessary for all apps but some cameras not necessary after conrmation kernal is stores this app in the ram and inside this process identify which are the threads and then give the same thread id to same proceess id not after this cpu ask to kernal send the thrades to the cpu now cpu only calcluat the difites so first it converts this data into the ascii value and the the exicute by the core one core can handle the two threade inside a threade is like image,click,code thre after confirmation it will send to the vram and gpu ask to vram is there anything if there then gpu will conet those threades as in ascii value to the simple text and drwas the actual visual of the app meeans we can see a colors because of the screen which connecte to the gpu gpu is call to the screen for the red-green-blue color to make the exacte color of the app ,now this way any app works 
+
+
+
+
+=>when we close button of the app it calles to the kernal with id and kernal remove the all thread from ram and cpu using the ID 
+
+
+
+CPU scaduler
+
+The Problem: 24 cores can only run 48 threads at an exact millisecond, but you have 300 threads waiting.
+/home/kishanms/.config/google-chrome/Default
+The Solution: The Kernel contains a component called the Scheduler. It gives each thread a microsecond of CPU time (a "time slice") and then forcefully switches to the next thread. It does this so fast that it creates the illusion that hundreds of things are running simultaneously.
+
+
+IPC
+=>when we need to talk to one app other app in same system the used the ipc
+
+
+The Solution: The OS provides a safe pathway called IPC.
+Example: When you click a link in your email app, the email app uses an IPC command through the Kernel to tell your Web Browser app: "Hey, open this specific URL." Without the OS managing IPC, apps would be completely deaf and blind to one another.
+
+￼
+
+
+/home/kishanms/.config/google-chrome/Default
+
+
+
+
+OVER NETWORK HOW ALL WORKS 
+
+NIC (Network Interface Card)
+    • => A physical hardware chip on your motherboard (either your Wi-Fi antenna or the Ethernet cable port).
+    • => It acts like a digital radio transceiver. Its only job is to shoot data into the air/cables as radio waves or light, and catch incoming waves.
+The Router/home/kishanms/.config/google-chrome/Default
+    • => The hardware box in your house. It acts as the local traffic cop, guiding data packets from your computer out to the global internet highway.
+IP Address
+    • => A unique digital phone number for every device on the internet. Your computer has one, and every website (like Google or YouTube) has one.
+DNS (Domain Name System)
+    • => The internet's Phonebook. Computers only understand numbers (IP addresses), but humans understand words (like google.com). DNS translates words into numbers.
+
+
+
+=>when we open the chrome based on above concept inside crom when we search google.com and then this ask to kernal check is this DNS there in catch is not then it will send this to the NIC and NIC send to  the router and router will send to the our ISP for  dns and they will check in the own DNS cath if there not then sedn to outside them network if there so isp send this data to the  router will send us a final message to the NIC and now nic has a website data and now wensite data send to the KERNAL now all are the thread of that process and now we can see the grom this website 
+
+
+ 
+
+Catch
+=>first it is store in the ram so after shuton and restart it will clean automatically by kernal
+=>here the passwod,many DNS , files which we continuesly re open it will store so we not need to every time talk to the internate for the long process it will open easily
+
+
+this is in the home directory
+
+
+
+Session & cookie
+=>when we login in the site so it will  create a session for login to the user and store this session in the website database and wesbite will send us a one file inside file there is session id this file is called the cookie and this cookie store in the our ssd when we re open the site the kernal read the data and crome is check in this folder is this site file we have if have then we automatically login in this site so this is role of session an cookie
+
+this is in the home directory 
+[  /home/kishanms/.config/google-chrome/Default  ]
+
+
+
+
+
+Firewall
+=>firewall is filter the traffic of the internte
+=>it is software in the laptop.. , but hardware in switch and router
+=>firewall is in the kernal mensn when any 
+[ Chrome ] (User Space)
+      │
+[ KERNEL ] ──> [ SOFTWARE FIREWALL ] (Inspects packets right here!)
+        │
+[ NIC / Wi-Fi Card ] (Hardware)
+
+    [means incoming  packets all are filter by the firewall]
+
+
+
+
+
+Buffer
+=>it is temparary space create by the RAM
+=>when we have open a youtub is process inside we watch the vedio/audio/..  this is thread ,and inside the thread we have this vedio data and this data is does not have end point so for that type of thread the ram create a space called the buffer ,now we can continuesly watch the stream...
+
+
+	
+=>each hardware of the system has own buffer in buffer for the next things
+=>for the vedio,audio,movement,action for these type of data we need a buffer
+
+
+
+
+
+
+
+
+
+Virchual memory
+means from the ssd kernal take some space and joint with ram so these process put inside so free up the space this space is called the vmemory
+
+
+
+
+Ram & Buffer Oveflow
+-when to many process runs so it will overflow the ram and buffer 
+=>at that time the kernal moves some process to the SSD free sapace(this is called the V-memory) to free up a ram .
+=>also when the process also not manage then kernal terminate big size process by OOM killer 
+
+
+[when buffer or ram overflow is watch by Diagnostics is a built-in OS feature which run in bg to give a pop up or make a blue screen with error ] 
+
+
+
+=>for the network anything block or remove by firewall
+=>when we have in the system it will block or remove by antivirus 
+clamscan –version [ this command to check ] 
+
+
+
+
+telnet
+=>our network communcation used it’s unencrypted and there is no key .
+
+
+
+SSL / TLS
+=>when the website has ssl certificate means when anyone visit given all user their public key when user requste anything frm browser to server this certificate multiply that requste with the public key and make a encrypted fromate and now it will send to the server and now server have private key this key character and requste character in both mix perfomr the one also to find the actual data 
+
+=>also use the digital signature by Certificate Authorities (CAs)  
+
+
+
+
+
+
+
+
+Soket
+
+ok first i want to clearify socket when we have a etwork process in system now each process over network we need to identify uniqally so at that time the kernal create a sapce in the ram page inside that poot the each process
+my port + my ip
+google port + google ip
+
+we can add the restart password using the bios and it willstore that setting in the ram cmos
+
+when we delete somthing it will store in the ssd/hdd but in hardcodded formate so not take the hugu space ,so ssd is full then we can not recover it but when the hdd is there so we can recover easialy 
+
+
+
+when we go to boot manu ->security ->there is two password
+    • administratore password = for the boot menu password
+    • user password = means when we shutdown or restart the computer then we need to type password then it will on the computer
+    • ssd/hardisk password = means it's ssd password when other still ssh they need to open ssd need a password
+
+
+security auditing and hardaning
+    • security auditing means we find the  loop hole in the auth.log file and also find how many loop hols are there using this method
+    • security hardening  means we can resolve those loop hold by using the ufw ,genrate the ssh keys to secure that loophole
+
+
+
+
+
+
+
+
+
+
+
+Networking-k
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ISO 27001
+IT’S word wide one comman certificate which has many guidlines for the security(like hardware and software related ),if we follows all the guidlines then and then they can able to give this certicate to us for the company
+
+
+Networking 
+network = means connect the device together
+networking = means over network we communicate with each other is networking
+right
+
+
+
+
+what is ip and what is mac
+    • mac address = it’s device wifi chip and ethernate port addresses not the device address right to identify over intrnate 
+    • ipv6  =it’s ip address of the device 
+    • ipv4 =it’s ip address for the device
+
+
+Feature	MAC Address	IPv6 Address
+Total Groups	6 groups	Up to 8 groups
+Characters per group	2 characters (xx:xx...)	Up to 4 characters (xxxx:xxxx...)
+Special Trick	Never has double colons	Often has a :: in the middle
+Size View	Short and compact	Long and intimidating
+
+
+Ip a(is a software address)
+we can see the ip address of the all interfaces  and but it will talk to os and outside work using ip address over internet
+
+
+
+ip r
+to see the routing table,when the packets comes to kernal the kernal check is this ip is local or send to nic for finding this address, the kernal identify this is local or not usin the subnet mask
+
+
+ip link
+to see the mac address of each nterface and see is this up or down
+
+
+
+the role of ip and mac
+next hop means(only router)
+=>when we send the packet from source to ip the each packet has ip and mac ,now ip table has source and desti ip not have next hop so the next hop address is mac address ,now when it will reach to next hop it will check is this ip is here if not then copy next hop mac and send to that hop untile desti ip not match with packet ip 
+
+
+
+=>we khow when the reach to hop if the ip not found then wich mac they copy
+source mac = currunt router mac
+desti mac = that router connected to router or isp so that mac copy here 
+
+
+
+ICMP
+ it's message send when the problem occure using ICMP the router and computer see what is problem occure in packet
+
+
+
+traceroute / mtr
+we khow, for the next hop we use the mac but mac is destroy at next hop so how we see our packet next hop so ,this commands is copy the all hops ip using the traceroute and mtr
+
+
+DNS 
+it's convert the domain name into the ip address , and we can see the DNS status using ( resolvectl status)
+
+
+dig / nslookup  wesbite_name
+means using both we can see the ip and dns infomration about any site right
+
+nslookup google.com
+dig google.com
+
+
+
+/etc/hosts
+ when we type the domain name and hit enter now kernal check this file is thi website is there is  there directe open no need to talk wolrdwide
+
+
+
+/etc/reolve.conf 
+when the kernal check in hosts file if not found ip then check the here to send this to that dns server based on this file
+
+      
+ARP(address resolution protocall)
+usng arp -e to see the network all ip ,mac address using this command
+
+
+
+
+Subnetting and CIDR(Classless Inter-Domain Routing.)
+subnettng = it’s subnetwork and it’s securiry purpose we used ,if we have vlan in switch then and then we can give the seprate subnet range to each vlans,if not then we have only one subnet range 
+
+CIDR : mena it’s representation of the ip like 192.168.1.1/24 (means first first 24 bit’s are network part and then host part ,if we remain all 24 bits as it’s and remainning as 0 so find the network ip address )
+
+
+
+TCP three-way handshake
+first the sender is send the first syc packet to the destination and f the destination send the syc+ack and now next the sender will send the ack to destination now the connection build and we have to communicate with each other these is three way handshake
+
+
+
+
+UDP vs TCP differences
+    • TCP (Connection-Oriented & Reliable): It establishes that 3-way handshake first. If a packet drops, TCP retransmits only the missing piece until everything arrives 100% perfectly.
+    • UDP (Connectionless & Unreliable): No handshake, no feedback. It just fires packets like a machine gun. If a packet drops, it's gone forever. But because there is no checking, it is blazing fast.
+
+
+Ports
+
+    • 22 = ssh port
+    • 80 = http port
+    • 443 = it's https port
+    • 445 = is smb(server message block) used for the data transfer from server to server and download in server using this port ,it's more secure
+    • 139 = it's SMBv1 and this is vulnerable port because it has eternal blue vulnerabilities
+    • 53 = it's DNS port
+    • 20/21 = ftp it also used to send the data from one device to other device in plain test formate
+    • 25(SMTP) = for sending the mail
+    • 110(POP3) = for download and delete main on this port
+    • Port 143 (IMAP) = to view the main over this port
+      
+SMTP is a protocall  and mail is service for the port 25
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+HTTP requste
+-get = when we need anything from the server mena like search the site,get data from server so we willl send the get requste to server,and server send us HTTP Response!
+
+-post =means when we want to create,upload or submit new information to server then we used this and server send us http responce .
+
+-delete =when we need to parmanantly delete data from server then we used this and server send us http responce
+
+-put/update = when we need to update our entire data in to server and then server will send us http responce
+
+-patch = when we need to udpate the some specifg data then used this and send to server and server send back us http responce
+
+-options = which is not send to server or client it will handle by browser ,like when any only and only when unkhow scirpts run in your page and delete somthing then it will block and handle by options
+
+-connect = when we used the proxey like burp suit our browser tell to burp suit crete a secure path then i will send all requste to you during sending to actuall server for this browser
+
+-trash = when during sending server if our any requste will corrupte so using trash we can see the eaxctly where the fault is ,but modern site will block this requste 
+
+
+
+
+
+
+Network Address Translation (NAT) 
+in the comnpany we have multipl device which has privtae ip address now all device want a youtub at time so this requste will go to router and router has NAT will convert the public ip into private ip and private ip into public ip to tell to outsude network  get the youtun and give to all private ip adresses
+
+
+
+Internal (Private) IP & Port	External (Public) IP & Port Assigned by Router	Destination
+192.168.1.10:4001 (Employee A)	203.0.113.5:50001	YouTube
+192.168.1.20:4001 (Employee B)	203.0.113.5:50002	YouTube
+
+
+
+
+
+
+
+
+
+
+
+Step 1: Set it up (Takes 10 seconds)
+    1. Open VS Code.
+    2. Click on the Extensions icon on the left sidebar (the 4 squares).
+    3. Search for "REST Client" (by Huachao Mao) and click Install.
+Step 2: Create your file
+    1. Create a brand new file in VS Code.
+    2. Name it exactly requests.http (the .http extension is the secret sauce).
+### 1. GET Request (Fetch data)
+GET https://jsonplaceholder.typicode.com/posts/1
+
+###
+
+### 2. POST Request (Create new data)
+POST https://jsonplaceholder.typicode.com/posts
+Content-Type: application/json
+
+{
+    "title": "Hello Bro",
+    "body": "This is my new post data."
+}
+
+###
+
+### 3. PUT Request (Replace entire data)
+PUT https://jsonplaceholder.typicode.com/posts/1
+Content-Type: application/json
+
+{
+    "title": "Completely Overwritten Title",
+    "body": "The whole old body is gone now."
+}
+
+###
+
+### 4. PATCH Request (Update a specific piece)
+PATCH https://jsonplaceholder.typicode.com/posts/1
+Content-Type: application/json
+
+{
+    "title": "Just changing the title string"
+}
+
+###
+
+### 5. DELETE Request (Remove data)
+DELETE https://jsonplaceholder.typicode.com/posts/1
+
+
+now open in browser https://jsonplaceholder.typicode.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Hardware-k
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Lan cable (digital signal)
+=>it’s sort range cable and faster also for the sort range 
+=>it has electical pulse signal for the data transfer over cable
+
+Pin/Wire Number	Wire Color	What It Actually Does
+Wire 1	🟠 White-Orange	Sends Data +
+Wire 2	🟠 Solid Orange	Sends Data -
+Wire 3	🟢 White-Green	Receives Data +
+Wire 4	🔵 Solid Blue	Used for Power (PoE) / Phone signals
+Wire 5	🔵 White-Blue	Used for Power (PoE) / Phone signals
+Wire 6	🟢 Solid Green	Receives Data -
+Wire 7	🟤 White-Brown	Used for Power (PoE) / Reserve
+Wire 8	🟤 Solid Brown	Used for Power (PoE) / Reserve
+
+
+-first orange cable pair is outging pair when you send the data it will pass from these two wires
+-green cable pair for receving data like download a somthing or open website it’s done by this cable
+-blue cable pair it is used when we need to transfer data faster it will automatically active and from these cable to send or recive data
+-brown cable pair when we need to pass the current for the cameras so this cables activate 
+
+[email(+) and email(-) so it will remove the noice if there ] 
+
+
+
+
+
+
+
+
+
+
+
+packet
+=>when we send the data it will convert into signal this signal 0-1 is the message which is the packet
+
+
+
+[ ------ ONE PACKET ------ ]
+       __    ___       __    ______
+______|  |__|   |_____|  |__|      |______
+      ( High voltage = 1 / Low voltage = 0 )
+
+
+
+
+fiber optics (digital signal )
+=>it is long range like city to city high speed data tranmission for used 
+=>it is pass the light signal 
+
+
+coaxial cable (wave signal) 
+=>it will pass the radio signal into the cable
+=>basically for high data tranmission we can use this like TV multiple channels we can use this it’s called the coxial cable 
+
+
+
+USB cable
+=>which transfer the electical signal to charge the mobile,mouse,keybord
+=>also transfer the Digital signal  to transfer the vedio ,audio,images 
+
+Wire Number	Wire Color	What It Transfers	The Job
+Wire 1	🔴 Red	Power ($+5\text{V}$)	Carries electrical current to charge the device.
+Wire 2	⚪ White	Data Minus ($\text{D}-$)	Carries the negative half of the data signal.
+Wire 3	🟢 Green	Data Plus ($\text{D}+$)	Carries the positive half of the data signal.
+Wire 4	⚫ Black	Ground ($\text{GND}$)	Completes the electrical circuit (returns the power).
+-here green and white for the data transmisison
+-red wire is for the charching the device
+-balck wire for the back the currunt from the device [so and red and balck for the chargin the device ]
+
+
+
+
+Repeter
+=>incrase the strength/range of the signal of tranmission
+[Computer] ---- Weak Signal ----> [REPEATER] ---- Strong Signal ----> [Switch/Router]
+          (Almost fading out)                (Clean & Boosted)
+
+
+
+
+Hub
+=>it is pyorly hardware device which connete the computer ovr internate it will not filter the data send the data to the all devices 
+
+
+
+
+switch
+=>when the data come from the cable the switch has ASIC (Application-Specific Integrated Circuit) which converts signal into digital data
+=>from first bites to indetify the mac address of the source and destinaton and chekc into the mac table to take a decision
+
+=>mac for inside identity
+
+
+
+
+
+Router
+=>when the data come from the cable the switch has ASIC (Application-Specific Integrated Circuit) which converts signal into digital data
+=>it will check the routing table is this ip is there to find the route limited and based on your ISP,
+if not in list then check in the defaul getway of last packet to find the ip
+
+=>ip for the outside network we need global address so the ip is like that 
+
+
+NIC
+=>this is in the mother bord over internate when the data travel must need to convert into signal so this device will convert the data intot the signal [for laptop,mobile,computer,tables..]
+
+-when the intenate not work or the signal down so the may NIC issue is there 
+
+
+
+[ Switch ]
+
+
+AP
+=>it will convert the wire cable signal into the radio signal(wifi) means provide the wifi
+
+
+
+RJ-45
+=>it will bind the cable perfactly for the port connection 
+
+
+Cat
+=>cat5 = old cables for the 100mbps
+=>cat5e = for the 1gbps
+=>cat6 = 10 gbps
+=>cat7  = 10 gbps
+
+
+IDS (intrusion detection system)
+=>it is hardwar and software mostoff
+=>it is live the RAM and background and continuesly moniter the networks logs and find if somthing wrong is there and then alert to the IPS
+=>ips is drop those packets(0 and 1) and send the terminalation message to the both device s stop the hack
+
+
+
+=>in the our compnay is they used the sophose firewall so it has inbuils snort tool so no  need to install ids/ips in the system because from firewall it will managed
+
+
+
+POE switch
+=>simple switch is sedn the data only over a lan cable 
+=>but poe switch send the data with currunte over the lan cable so we can connecte the cctv cameras
+
+
+[ TP-Link,D-Link,Microtik is switch brand name used for the small buisnees and big buisneess also  ]
+
+
+NVR
+=>cctv camera is only provide the live streaming 
+=>but we need to store them so for this we have computer box NVR where we store live cctl data into the NVR , hard drive
+
+
+
+
+
+stabilizer
+=>from outside we get high voltage of power and when this power we directly send to the server,system,switch or router so it will demage so to stable  the all device power using this stabilizer
+
+
+
+
+UPS & INVERTER
+-when the light gone then both in action
+=>ups =light cut then it will on and take battery power to run the server at time becuase 1 sec delay crash the server so used this 
+
+=>inverter = it will also take a power from the battery and in some second it will provide a power
+for the light,fan
+
+
+
+IP-PBX (IP Phone Box)
+=>landline connecte with the lan cable for the internate and has a ip address
+=>it’s box which manages and connecte the all landline together to calles over our interate,we can talk inside office and anywhere in world 
+
+
+
+
+
+
+
+
+
+
+
+
+
+my Learning
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[REDACTED: salary-slip password removed]
+
+resolvectl status = to see the DNS 
+
+
+
+
+PASSWORD AUTHENTICATION FAIL FOR THE  odoo19
+ 
+Database creation error: connection to server at "localhost" (127.0.0.1), port 5432 failed: FATAL: password authentication failed for user "odoo19" connection to server at "localhost" (127.0.0.1), port 5432 failed: FATAL: password authentication failed for user "odoo19"		
+
+ -first check the postgress is woking or not means start or not
+
+ -then check the odoo services stats or not 
+ 
+ -then after check the sudo nano /home/emipro/PycharmProjects/conf/odoo19.conf
+here is anyting chnages or not 
+
+ -then after  check the passwod is wrong or right if not authenticate then reset the password of the database using terminal
+
+  1).for sql
+   sudo -u postgres psql  [open psql cell]
+    
+   \password odoo19 [here is passdowrd of the user  means new pass]
+ \q [to quite from this cell ]
+
+
+ 2).for restartservice
+ sudo systemctl restart odoo19.service 
+ sudo systemctl restart postgresql
+
+
+
+http://192.168.1.220:8078
+
+http://192.168.1.220:8078/web/login?redirect=%2Fodoo%3F
+
+
+
+
+
+
+odoo 18 and 19 installation
+1).requirement.txt 
+file always see the gevent version
+pip install "greenlet>=3.0.3" "gevent>=23.9.1"  and consider this based on nees
+
+
+
+
+2).after installing postgress vesron we can see this 
+
+Success. Please check that the upgraded cluster works. If it does,
+you can remove the old cluster with
+    pg_dropcluster 17 main
+
+Ver Cluster Port Status Owner    Data directory              Log file
+17  main    5437 down   postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+Ver Cluster Port Status Owner    Data directory              Log file
+18  main    5436 online postgres /var/lib/postgresql/18/main /var/log/postgresql/postgresql-18-main.log
+Processing triggers for man-db (2.10.2-1) ...
+
+
+
+
+3).postgres=# CREATE USER odoo18 WITH SUPERUSER PASSWORD 'odoo18';
+ERROR:  role "odoo18" already exists
+
+
+
+
+
+
+4).
+check the service file 
+config file 
+start service 
+check path 
+check the port 
+and chek to run in the icognito to solve the error
+
+
+
+
+
+odoo 19
+
+
+1).curl -fsSL [URL]: Downloads content from a web link silently and follows any redirects.
+    • -f (Fail silently): Hides server error messages (like 404 pages). 
+    • -s (Silent): Hides progress bars. 
+    • -S (Show error): Shows errors only if the download completely fails.
+    • -L (Location): Automatically follows web redirects. 
+    • | (Pipe): Hands the downloaded file directly to the next command without saving it to your computer first.
+    • sudo -E bash -: Runs the downloaded script using bash as a root/administrator user. 
+    • sudo: Grants top-level admin/root permissions. 
+    • -E: Keeps your current system settings (environment variables) while switching to root.
+    • bash -: Tells your terminal to execute the incoming text directly as code.
+
+
+2).error in node js intallation
+2026-07-24 10:05:39 - 
+===============================================================================
+                            DEPRECATION WARNING                            
+===============================================================================
+Node.js 18.x is no longer actively supported!
+You will not receive security or critical stability updates for this version.
+
+You should migrate to a supported version of Node.js as soon as possible.
+
+Please see https://nodesource.com/products/distributions for details about which
+version may be appropriate for you.
+
+The NodeSource Node.js distributions site contains
+information both about supported versions of Node.js and N|Solid supported Linux
+distributions. To learn more about usage, see:
+https://nodesource.com/products/distributions
+
+===============================================================================
+
+Continuing in 10 seconds ...
+
+
+
+
+3).there is no npm file measn npm is there but inside there in nothing so first i was installed that 
+whereis npm [to connfirm]
+
+
+4).
+setuptools and wheel are core Python tools used to build and package Python software.
+
+
+5).same error in the requirement.txt
+
+
+
+6).
+to see the open port 
+
+and 
+
+see the service fiel here  === cat /etc/systemd/system/odoo19.service
+
+
+
+7).exit from virtual environment
+[deactivate] this command
+
+
+
+
+
+
+8).to see the history of the users in ssh
+
+sudo cat /home/emipro/.bash_history
+
+
+
+---------- solve the errrors-------------
+
+http://192.168.1.220:8078/ to run this 
+
+
+systemctl start odoo19.service
+
+sudo nano /etc/systemd/system/odoo19.service
+
+systemctl daemon-reload
+
+systemctl status odoo19.service
+
+
+
+---------------------- in file path not changed path
+
+/etc/systemd/system/odoo19.service
+
+1).#ExecStart=/usr/bin/python3.9 /home/emipro/PycharmProjects/odoov19_community/odoo-bin \
+#   -c /home/emipro/PycharmProjects/conf/odoo19.conf
+
+2).WorkingDirectory=/home/emipro/PycharmProjects/odoov19_community
+
+
+3).Restart=always
+
+
+4). Hardening in this change this below line
+   -# ProtectHome=false ensures Odoo CAN read/write your addons and filestore inside /home/emipro/ ProtectHome=false
+
+
+
+->consider first as above steps are the solutions 
+
+
+-----------------------------------------if you need then you can change the things 
+
+
+sudo nano /home/emipro/PycharmProjects/conf/odoo19.conf
+
+1).
+#addons_path = /home/emipro/PycharmProjects/odoov17_enterprise,/home/emipro/PycharmProjects/odoov17_community/addons,/home/emipro/PycharmProjects/odoov17_community/odoo/addons
+addons_path = /home/emipro/PycharmProjects/odoov19_enterprise,/home/emipro/PycharmProjects/odoov19_community/addons,/home/emipro/PycharmProjects/odoov19_community/odoo/addons
+
+
+2).commint the logroate line
+#logrotate = True
+
+
+3).
+# Use 0 for unlimited time during development 
+before => cpu 9999999999999
+
+limit_time_cpu = 0 
+imit_time_real = 0
+
+4).cahege the port number 
+8078
+
+to 
+
+8088
+
+
+
+
+
+
+Hardware information
+[ lsusb – command for following thins] 
+
+1.  Realtek Semiconductor Corp. RTS5129 Card Reader Controller
+This is the dedicated hardware chip responsible for managing your computer's built-in SD or MicroSD card slot.
+
+2.  Intel Corp. Integrated Rate Matching Hub (RMH)
+=>it is port where we connecte the mouse or keybord but 2.0 port
+
+
+3.  Linux Foundation 2.0 Root Hub = It is a built-in software driver driver created by the Linux kernel developers to represent the master controller of your USB system.
+
+
+
+4).  [  lsusb -t   ] bus topology in the hardware , means usb ports and other hardware ports are connected in the  bus topologys right . 
+=>always these ports are in the bus topology in only for the hardware
+
+
+
+Zabbix
+1).https://192.168.0.163/doc/index.html#/portal/login
+
+means it is cloud where our data fetch from the our nvr in any network and we can see in any device from anywhere right
+
+
+2).Zabbix
+=>it is continuesly moniter system over our network and give us a alert what is happing in systema and give a status also to that we can solve the problme thrugh the ssh or inform them . 
+
+=>zabbix is enterpirze(company) level software which help to moniter each and every thing in the compnay like 
+    • Networks: Routers, switches, firewalls, Wi-Fi access points, and bandwidth usage.
+    • Servers & Operating Systems: Physical or virtual machines running Linux, Windows, macOS, or Unix.
+    • Cloud Infrastructure: AWS, Azure, Google Cloud instances, Kubernetes clusters, and Docker containers.
+    • Databases & Software: MySQL, PostgreSQL, Web servers (Apache/Nginx), and custom applications.
+    • Hardware & Storage: CPU temperature, fan speeds, power supplies, and SAN/NAS storage arrays.
+
+
+1).dashboard
+=>if the host connected with internate then we can see how many user live r=or how many not,
+RAM is the top of your desk—everything you are actively using lives here because it's super fast.
+
+=>also see the users live errors 
+
+=>time,and ..
+
+
+2).Monitering
+-problems : means we can see the indivisual user problems with status 
+
+-hosts = how many users curunty live on the internate we can see here
+=>also with graphs of cpu,ram,memory,ssd
+
+-latest data =means live inforamtion about my device like 
+(cpu,ram,memory ..)
+
+
+
+
+3).invetory
+=> Those 4 machines act as the client applications/servers that send user login requests (passwords/credentials) to the KAF (Kerberos) server, which checks them and confirms if the user is valid or not.
+
+=> 4 specific computers or servers in your company that handle KAF authentication connections.RAM is the top of your desk—everything you are actively using lives here because it's super fast.
+
+
+
+
+Latest data
+
+1).cpu things for lastly updates
+-user time = measn cpu is take how much time to running the application lastly
+
+-system time = cpu is handle the kernal task ,and and how much time last its used we can see
+
+-idle time = since how much time its not perform anything
+
+-Iowait time  =The CPU is fast, but it is waiting for a slow hard drive(high usage process) to finish loading a heavy file.
+
+Only 2 metrics matter 99% of the time:
+    1. CPU Utilization / Idle: Is the CPU overloaded (above 90%) or resting fine?
+    2. Iowait: Is a slow hard drive slowing down the machine?
+    • The rest (SofRAM is the top of your desk—everything you are actively using lives here because it's super fast.
+    • tIRQ, Guest, Nice, IRQ): These are advanced deep-level details. System engineers only look at them when a server is having a rare, very complex network or hardware failure.
+
+2).environment: means curreny how many users are runinng in this system , and zabbix moniter this 	before 1 minit 
+
+3).helth
+=>means the Zabbix Agent software on that server is installed, running, and successfully communicating
+
+
+4).memory 
+=>live status of ram and swap memory
+
+5).network
+=>analyj the total interface work or not and how many bits send and bits receves moniter here
+
+
+6).os 
+=>give the infromation about os
+
+
+7).raw
+=>it will give the row data means in json formate like how much memory used and need
+
+
+8).security
+=>A checksum is a unique mathematical "fingerprint" calculated from the file's exact contents.means when aytong change then fingerprint change . 
+
+9).storage
+=>to moniter the last read,write,update list
+
+10).system
+=>system uptime,number process,boot time,
+	
+
+11).disk
+=>means disk information
+
+12).filesystem is mainly based on disk infromation
+/  :root
+/boot : when the cmputer starts what is running this is 
+
+
+13).interfce = means in this internface how many bits tranfer and recived
+
+
+
+Report
+
+-Send Dashboard PDF Reports TO Users
+
+-Generate Activity & Alert Reports ABOUT Users
+
+
+
+What is "Data Collection"?
+The Data Collection menu in Zabbix is where you configure WHAT Zabbix monitors and HOW it gathers data
+
+
+
+
+In Zabbix, Actions are the automated responses Zabbix takes when something happens.in the notification manue 	
+
+
+
+
+
+	
+1). loopback is , When Zabbix is running on the same machine as your MySQL database and other software , Zabbix uses the loopback interface (lo / 127.0.0.1) to talk to MySQL.
+-Zabbix sends a message to 127.0.0.1 targeting MySQL's standard port (3306). is not running then connection refused 
+
+
+s
+2).RAM is the top of your desk—everything you are actively using lives here because it's super fast.
+
+-same computer communcation  loopback interface
+-outside computer means like search site ,shh for used the intrnate interface
+
+
+
+
+
+
+Zabbix Errors
+
+1).Active check are not availabel = If the Zabbix Server is not listening on port 10051 (or if it is configured to use a different port), the Zabbix Agent cannot communicate with it, and you will get that error.when the system is in sleep also this type of error there
+	
+	
+2).telnet
+telnet     192.168.1.155      22
+
+3).Linux : inteface : linkdown = means user is not connected with the internate
+
+
+4)."USB storage policy degraded"  = This happens when a USB device—like a keyboard, mouse, or flash drive (pendrive)—is plugged in and violates the security rules (like malacious thing or faultu hardware), or when the system detects something abnormal about the device.
+
+=>refress the rules to block that usb but must have sudo permission
+
+# List all connected USB devices (shows Vendor ID & Product ID, e.g., 8087:0024)
+lsusb
+
+# Check real-time system logs when a USB is plugged in
+sudo dmesg | tail -n 20
+
+
+5).high memory utilization
+
+
+6).high swap memory used 
+=>when the memroy fully overflow at that time we used the swap memory to recover the system
+
+
+7).sssd = thie protocall basically used to communicate to os to AD but somtime used im many application for talk to os to that software so also in the zabbix client is not talk to the os then also this error can occure 
+
+
+
+
+
+
+password authentication methods
+
+=> when the password authetication failer at that time we need to go to the first 
+  /etc/pam.d  there is in all [common-anything  *] name file commente the ldap lines 
+
+
+
+
+1).why user can not able to run as sudo 
+=>first the user does not have sudo permission means user is not in sudo group 
+
+
+
+2).how to create this errors
+=>Sorry, user kishanms is not allowed to execute '/usr/bin/su' as root on lp-0056.emiprotechnologies.com. [this error says the can not able to exicute this file  means as root exicutable file means this user is not in sudo
+
+=>go to the admin user and set this permission
+
+
+-sudo visudo [here open the editor write the below line]
+    username ALL=(ALL) !/usr/bin/su
+
+
+
+=>kishan is not in the sudoers file.  This incident will be reported. [when you are not in sudo group this error ocuured]
+
+-sudo adduser kishan sudo
+
+
+
+
+
+3).permissions
+%sudo    ALL = (ALL:ALL) ALL
+ │        │      │   │    └─► 4. allCOMMANDS alloweed for for all user,group say  
+ │        │      │   └──────► 3. GROUPS allowed to run as
+ │        │      └──────────► 2. USERS allowed to run as
+ │        └─────────────────► 1. HOSTS where rule applies
+ └──────────────────────────►means users who is in sudo group
+%=group
+kishan=user
+
+
+
+
+4).id = this is command to see my in which groups with uniq id 
+=>also it will show you the old thing unitle you refress security rull
+=>you can refress it logout and logdin back to refress it 
+
+
+5).groups= means user in which groups
+
+
+
+6).for example in my system i was created user kishan now i want to access this user because it has sudo permission so in anycomputer 
+
+
+=>for example in susystem is have multiple users like user,user1,user2
+so
+
+ssh user@192.168.1.152
+ssh user1@192.168.1.152
+ssh user2@192.168.1.152
+[so remember this]
+
+
+
+7).
+kishan ALL=(ALL:ALL) ALL
+
+"The user kishan, on any computer/host, is granted total permission to run any command which assign to the kishan while impersonating any user or any group on the system.	
+
+
+8).to see what inside group
+-getent group usbblocked
+
+
+
+9).when password expires we can see 
+-sudo chage -l kishan
+
+
+10).debug1: Authentications that can continue: publickey,gssapi-keyex,gssapi-with-mic,password,keyboard-interactive
+
+
+
+11).stop or expie the password  = exmple when user leave the compney then we need to freez account so no one can accesss it .
+sudo passwd -l emipro [to lock account]
+
+
+=>ssh emipro@192.168.1.152
+emipro@192.168.1.152's password: 
+Permission denied, please try again.[this error occured then use the below command]
+sudo passwd -u emipro
+
+
+
+12).sudo cat /etc/shadow 
+=>it stores the actual encrypted passwords for all user accounts on the machine.
+
+kishan:$y$j9T$fr1EgJbSThNkT4wJVp8C5/$ixwyqvRYOzf5NfF/LAY4TD034rTpvtiznXspw8wRW9D:20670:0:99999:7:::
+
+
+Pysical topology 
+
+1).WHAT AD
+=>AD is microsoft database for the business
+
+2).what is ldap
+=>is protocall to authnetcate data from the  Ad
+
+
+
+
+User Types Password
+       │
+       ▼
+1. PAM (Local Rules Check)
+       │
+       ▼
+2. FreeIPA / Active Directory
+   ├── Kerberos ──► Checks if password is RIGHT or WRONG
+   └── LDAP     ──► Looks up user details & group permissions
+       │
+       ▼
+3. Keycloak (Web SSO Gateway) means for all  account have single password
+       │
+       ▼
+4. Ansible (The Automation Tool behind the scenes)
+
+=>here sso is not a keycloak, also AD is in ubuntu so we have only authentication provide in the AD . 
+
+
+=>today 7-aug-2026 complett the excelt sheet of the commads accessible for the user
+
+	
+
+some basic information
+
+ps aux | grep "pts/0"
+
+to find what they lastly perform commmadns
+
+
+
+
+1).unifi access point is hardware device ,in this devices network provide by lab cable and that network converts into wifi and now any device use the wifi because of this hardware right
+
+
+
+2).who  command
+seat0 = means user is inserted the pysical devices 
+
+-tty2 = means its reprsent that your whole system like cpu,mouse,wallpaper....
+
+-pts/0 = means usr is running the termilan 
+
+
+
+3).
+
+    • PAM (/etc/pam.d/): First step. It intercepts your password, checks local format and security rules (e.g., minimum length, lockout rules), and sends it out for verification.
+    1. FreeIPA (Kerberos / KAF): Password check. It verifies if the password you typed is right or wrong and hands back an encrypted security ticket.
+    2. LDAP: Permissions. Once the password is confirmed right, LDAP looks up your user details, group memberships, and assigned permissions.
+    3. Keycloak: Single Sign-On (SSO). It bridges your login so that the exact same password works for your desktop screen lock, company websites, ERP system, and web portals without asking you to create separate accounts.
+    4. Ansible: Automation. It automatically installs, configures, and connects PAM, FreeIPA, Keycloak, and Linux clients across hundreds of servers using automated playbooks.
+
+
+4).
+ date : 3/7/25 solve the   problem of tanusa mem problem
+and one more user password problem 
+
+5).kishanms@lp-0056 
+
+=>so here the kishanms is username name means inside system you want find a path or intnel loca sytm work so you must be use the username
+
+=>when you commnitate our internate then you must be use the ip address or the hostnmae ,if hostname not work then use this .[ssh,or other you need hotname and ip] if work .
+
+
+
+
+
+sending data like ssh or software using
+1).scp 
+2).rsync
+
+3).using the python server to locally host the page and send to all , means it is not secure 
+
+SENDER :  python3 -m http.server 8000
+RECIVER : wget -r http://<SENDER_IP>:8000/filename
+
+
+
+4).[LocalSend app] to send data over the interate ,it is faste
+
+
+
+
+Resolve the network and ssh errors
+
+1) internet not working check 
+    • first i think this was a connection problem like ethenate is properly up or not the i was perfromrm the rendom commands for the solving this issue but actually this was not issue becuase the ethernate properly work.
+
+    • after i was think if ethernate work properly then ,i was check the configuration like ipaddress,dns resolution, but as practice i was not found the problme from here  because all those things working properly
+
+    • after that i think this problem i can not able to found then ask to the AI the rendome questions but sir sugested me to first fund the issue and why is happened then found the 
+      solution then i found the one file [sudo nano /etc/resolv.conf] inside that i can see the related things but there i get stuck after many time changes i got nothing then i was logout from that user and go to my system and chek this fle sudo nano /etc/resolv.conf and there i was see the diffrence and i got a exat solution of that problem there the two line not writen ,when the that type of problem occure at that time always you can first chek this file whith formate
+[ sudo nano /etc/resolv.conf]
+          nameserver 127.0.0.53
+         #options edns0 trust-ad
+         #search .
+
+
+
+2) ssh incoming to this system not working
+    • first i check the network is private or not because if the network is public so it will automatically filter the remote connection but the network is private by default 
+    • after i was check the ssh is installed in that device or not but installed
+    • after chek the ssh service is running or not [systemctl statuse ssh]
+    • also user blocked by the admin means it can not able to login through the screen lock or the ssh[sudo passwd -l kishan, sudo passwd -u kishan]
+    • but all things are woking properly so after that ask to the AI and they tell me to perform this commands [
+      sudo ufw allow 22]
+
+3) /home/emipro/kishan folder not accessible check
+    • i khow if we can not able see the file then always open as root user ,and it works it was open as root but not open as simple user 
+    • after root user i just give permission using   command like[chmod 755 kishan] now i can able to see the file as simple and root user 
+
+
+
+How to lock the account 
+=>first lock means user can not log into that account though the lock screen or the ssh 
+-sudo passwd -l kishan [ this command to lock the account]
+
+-sudo passwd -l kishan [ to unlock the account ]
+
+
+
+
+
+
+how to exicute the process in the bg, ways
+=>first always check is this process is running or not
+-sudo systemctl status services_name
+nohub ./one.sh >> output.log 2>&1 &
+
+    • nohup (No Hang Up): Keeps the app running even if you close the terminal window or log out.
+    • ls =
+    • > ls.txt	: stores the ls output here
+    • 2>&1: Takes all error messages (if the app crashes) and sends them to the exact same node.log file.
+    • &: Runs the entire thing in the background so you can keep typing other commands (like ls) immediately.
+
+
+=>if you want to stop then first check is this  curruntly running is yes then using a kill commands we can stop that services ....
+[pkill -f your_command_name ]
+
+=>using also systemctl enable command to do that same things
+
+
+
+Block the user for ssh 
+=>means i will set the rull for that user means that user can not able to take the any user ssh in that system or in other system
+
+---------------- block the user ----------------
+-sudo nano /etc/ufw/before.rules
+-A ufw-before-output -p tcp --dport 22 -m owner --uid-owner kishan -j REJECT [ block the ougoint requste ]
+-sudo ufw reload
+
+---------------- unblock the user ----------------	
+-sudo nano /etc/ufw/before.rules
+-A ufw-before-output -p tcp --dport 22 -m owner --uid-owner kishan -j REJECT
+-sudo ufw reload
+
+
+
+
+Stagging server
+=>In simple terms, a staging server is a private "test copy" of a company's real website or software. It is a clone that looks, acts, and feels exactly like the live system, but it is completely hidden from the public. [ means it’s testing site where we test before the live ]
+
+=>vm = it's seprate and private system where the website clone is there and only limited user can access this server for the testing the site before the live the site
+
+=>V.E =it's place where we create a seprate space for this perticuler folder or software installation all things only for this perticuler folder
+
+=>stagging server = means it is the comnay's site clone ,it is in the V.M
+
+
+
+KAF(keyclock ansimble freeIPA + pam.d  + LDAP + AD
+=>first when any user enter the password in the system so first it will check by the pam.d ,pam.d is the basic rules for the password and then send to the Kerberos it will chekc that password is wrone or right from the AD using LDAP ,now after is password is right then LDAP is given the authorization to the user and ansible is automate these process at time ,
+
+-here freeipa/AD = both are the database we can use these one by one based on need
+-keyclock = its part of KAF but only for the website login means it is provide single password to sign in in any site is that user in KAF [sso]
+
+[here password reset from the site and also lock the user from the site where am i work]
+
+
+
+OS
+
+=>kernal =The kernel manages hardware resources (CPU time, RAM, storage drives, network/GPU devices) and software execution (process IDs, security/permissions, and hardware translation via drivers).
+
+=>CPU: Manages general logic, complex decision-making, and step-by-step program execution for the entire system.
+=>GPU: Manages massive parallel visual data—rendering graphics, drawing screen pixels, and processing heavy 3D/AI calculations.
+
+
+=>RAM manages active program data temporarily by holding open files, variables, and instructions so the CPU can access them instantly.
+
+=>ROM (Read-Only Memory) stores the permanent boot program (BIOS/UEFI) that tests your hardware (POST) the second you press power and loads the OS kernel into RAM.
+
+=>os connecte all above works cpu,gpu,ram,rom,memory,kernal
+
+
+
+vlan and subnet 
+=>subnets =it will devide the ip range into small parts also neteorks   192.168.1.1/23
+-means in one swith we device both part so both part internally we give the diffrent ip range is it subnetting main perpose to identify parts esialy
+
+
+=>vlan = it will devide the pysically switch into two parrt like 
+from port 1-10 = vlan10 [for the landline]
+from port 12-24 = vlan20 [for the cctv] 
+- mainley used to protect from the noice means each other not listion each other traffic for that we need a vlan
+
+[in our comney only one subnet is there and vlan is not there]
+
+
+NAT =network address  translator is always in the router and configure using that router web interface
+
+
+Server(computer)
+=>it’s looks like cpu but it’s not a cpu inside we have cpu,ram,fan,ssd/hardisk .inside we have ssd inthat we store the data now that data we can exicuteion and process we are use this server ,also we can remotly access this server in same network to store and exiction of our project it’s like a one computer system
+
+
+
+
+Jammer
+=>A jammer is a electronic transmitter device—often looking like a small metal box or walkie-talkie with multiple black antennas stickingTo be filled by O.E.M. out—that blocks communication by blasting powerful noise on radio frequencies(WIFI.mobile internate,mobile calls,Access points,vokey tokey)
+=>so there used incrypted signal calls 
+
+
+FIND THE Serial number
+=>using this commands to find the desktop or the laptop
+hostnamectl 
+or
+-cat /sys/class/dmi/id/chassis_type
+[here is 3,4,6 so desktop .if 9,10 so laptop .if 8 so laptop or tablet ]
+
+
+=>how to find the serial number of system
+-sudo dmidecode -s system-serial-number
+
+[
+dmidecode = it’s tool that read the motherboard chip data
+-s system-serial-number = The specific setting telling the tool: "Skip everything else and only show me the hardware serial number."
+]
+
+
+=>there is Error like TO be filled by ovm or Default String mesn there is no serial number in motherbord 
+	
+Asset received from user upon departure. Successfully unassigned and returned to stock.
+
+
+
+How to create virchul environment
+=>V.E is a specifically only and only for the python so there only you can use the pip for installtion not apt 
+
+ubuntu
+# Step 1: Install the venv tool (Only do this once) 
+sudo apt update && sudo apt install python3-venv 
+
+# Step 2: Create the environment (named 'myenv') 
+python3 -m venv myenv 
+
+# Step 3: Activate it 
+source myenv/bin/activate
+
+
+
+
+macos
+# Step 1: Create the environment (named 'myenv') 
+python3 -m venv myenv 
+# Step 2: Activate it 
+source myenv/bin/activate
+
+window
+:: Step 1: Create the environment (named 'myenv')
+python -m venv myenv
+
+:: Step 2: Activate it
+myenv\Scripts\activate
+
+-  deactivate to close the V.E
+-  rm -rf myenv
+
+
+Battery info of system
+-upower -i /org/freedesktop/Upower/devices/battery_BAT0
+-upower -e [to see the info]
+
+
+
+Cryptography
+    • it’s a method to convert the readable data into the encryted formate
+    • there is there things here
+Symmetric encryption 
+Asymmetirc enyrption 
+Hashing = it’s genrate the mathamatical string for the any amout of data if the single charactr change then hash will change used mostly in password hashing 
+
+=>digital key means(our private and public key called digital keyes ) ,and dgital signature means data+private key become the digital signature and this signature always diffrent based on data
+
+=>keys used the encoding(Base64 Encoding) method and digital signature used the hash(SHA) .  
+
+
+
+
+
+Use the Online Linux for the window to run the ubunut command
+Yes, there are several free websites where you can open an online Linux terminal directly in your web browser without creating an account, logging in, or giving your email address.
+If you are at a laptop shop where the machines only have Windows installed, you can simply open Microsoft Edge or Google Chrome, visit one of these sites, and immediately test Linux commands to see OS and hardware information.
+Best No-Login Browser Linux Terminals
+    1. JS/Linux (Fabrice Bellard) — bellard.org/jslinux/
+        ◦ What it is: Emulates a real Linux x86 kernel completely inside your browser using JavaScript/WebAssembly.
+        ◦ Login required: No. You just click "startup" and it instantly boots into a Linux terminal.
+    2. LinuxOnTab — linuxontab.com
+        ◦ What it is: Boots an Alpine Linux kernel directly inside your browser tab.
+        ◦ Login required: No. Zero sign-up, zero installation.
+    3. Killercoda Playground — [killercoda.com/playgrounds](https://killercoda.com/playgrounds)
+        ◦ What it is: Gives you an Ubuntu/Linux shell right in your browser. (Note: Some tracks require a 1-click GitHub login, but their base playgrounds let you run commands instantly).
+    4. WebTerm — webterm.app/en/free-play
+        ◦ What it is: A lightweight terminal sandbox in your browser for typing and practicing Linux commands.
+        ◦ Login required: No sign-up or installation required.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Security
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SaaS(Software as a Service)
+    • means the tool hosted in the cloud server which has own cpu,gpu and ram ,os and when we give them input task so that task perform in them server and provide the output in our brower,meas we not need to use the cpu,ram ,os to calcualte or perfomr that task it will do by that tool cloud we get the only output ,here in our system use the cpu but less then other app for the SaaS(create, edit, process data we need to downldo anything it will manage by that tool )
+    • unlike in youtub when we watch the vesio our cpu need to calculate thar task then it will sedn to gpu and we can see output
+    • Examples: Canva, Google Docs, Gemini, Gmail, Salesforce, Microsoft 365 Online.
+
+
+our key or data are incrypted or hash algo
+encrypted means data is securtly lock with the key no one unlock,but it will recoverable 
+hash means in the data the hash algo perform and now it will not recoverable no can see that data 
+
+
+
+
+
+
+Latancy  :  how mach time taken to reach all the data at destination called the latancy 
+Throughput : how much data recive at one second is called the throughput
+
+
+
+
+
+
+
+how to recover delete data from the ubuntu
+
+1).Photorec Command (Raw Block Scanning):
+sudo photorec /dev/nvme0n1p2
+    • Kaise kaam karta hai: Yeh tool poori SSD me PNG, JPG, aur PDF headers dhoondta hai aur unhe ek safe location par save kar deta hai.
+      
+
+2).Ext4magic / Extundelete Command (Journal Recovery):
+sudo ext4magic /dev/nvme0n1p2 -r -f home/kishanms -d /tmp/recovered
+    • Kaise kaam karta hai: Yeh Linux Ext4 journal log ko read karke delete hue target folder /home/kishanms ko exact original structure ke saath wapas lane ki koshish karta hai.
+
+
+3).find /home/emipro/ -type f -name "*.png" 2>/dev/null  means we can find is there anythingis remaining our system then and thn we can recover that 
+
+
+
+Microsoft 365
+=>it’s a platform where our organization microsoft apps,and microsfot accuunt and micosoft account and software security we manages it’s the Microsoft365
+
+
+
+Crone
+=>crone it’s linux bg service used to run the crone jobs
+=>crone jobs : specific command or script continuesly run in the bg without any human help 
+
+-crontab -e = open a editore of the crone job where we set the process
+-crontab -l = to see the currently running crone jobs
+*/5 * * * * /path/to/your/battery_health.sh >> /tmp/battery_cron.log 2>&1(write in the crone -e)	

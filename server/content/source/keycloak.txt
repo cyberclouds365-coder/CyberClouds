@@ -1,0 +1,539 @@
+﻿
+Keyclock SSO
+
+    • first this is sso server will bypass the authencatin method for the users wich include there , this is used for the enterpize not used for the specific indivisual users(like from my personal computer i can not do this because need a administatore account of all live site then we can do like google or other )
+
+    • because site like gemini , google , github can not provide by default sso thing need a admnistratore(enterpize level) account for all sites to enable the sso with keyclok and then use the sso for the all sites 
+
+
+
+
+
+
+1).how to check which  server use in that  site (no nee to do this .only for testing )
+    • curl -I https://www.emiprotechnologies.com
+      
+    • or go to inspect->refress->first domain name packer ->in header we can see server inforamtion
+      
+
+
+In production  : Point a domain name (e.g., sso.yourcompany.com) to your Public IP, set up an Nginx/Cloudflare reverse proxy with HTTPS, and enter 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2).List of site which protocall they used and which account we need for the sso
+
+
+Platforms That Include SSO in Free, Basic, or Standard Plans
+Platform / Vendor	Lowest Plan with SSO	Included SSO Type / Description
+AWS	Free / Base Usage	AWS IAM & Identity Center (SSO) are free to configure out of the box.
+Microsoft 365 / Entra ID	Included with M365 Business Basic	Native SAML / OIDC SSO & IdP access included on lower-tier licenses.
+Google Workspace	Starter Plan ($6/user/mo)	Google functions as both a SAML IdP and SP across all paid tier plans.
+Cloudflare	Free Tier	Cloudflare Zero Trust includes SAML/OIDC SSO for up to 50 users at $0.
+Tailscale	Free Tier	SSO (Google, GitHub, OIDC) is enforced by default on all accounts including Free.
+Bitwarden	Teams Plan ($4/user/mo)	Bitwarden Login with SSO is available on the basic Teams tier (not restricted to Enterprise).
+Linear	Standard Plan ($10/user/mo)	Google Workspace & SAML SSO included on standard user tiers.
+Render	Standard Plan	Supports team Single Sign-On via Google/GitHub natively on standard workspace tiers.
+Sentry	Team Plan ($26/mo)	Basic SSO support (Google/GitHub/SAML) available without entering Enterprise tier pricing.
+Vercel	Pro Plan ($20/user/mo)	Basic OAuth SSO available on standard Pro teams.
+Platforms That Lock SAML/OIDC SSO Behind Enterprise Plans (Not Supported in Basic)
+Platform / Vendor	Basic Plan Cost	Enterprise Plan with SSO	Price Increase to Get SSO
+GitHub	$4/user/mo	GitHub Enterprise ($21/user/mo)	425% markup to get SAML SSO.
+Figma	$12/user/mo	Organization / Enterprise ($45–$75/user/mo)	SSO is restricted to Organization tiers or higher.
+Slack	$7.25/user/mo	Business+ / Enterprise Grid ($15+/user/mo)	SAML SSO requires upgrading to Business+ or Enterprise.
+Notion	$8/user/mo	Business / Enterprise ($15–$25/user/mo)	SAML/SSO is restricted to Business tiers and up.
+Miro	$8/user/mo	Business / Enterprise ($16+/user/mo)	Single Sign-On (SAML) paywalled behind higher tiers.
+Docker	$9/user/mo	Business ($24/user/mo)	Enforced SAML SSO locked behind Business plan.
+Postman	$14/user/mo	Enterprise ($49/user/mo)	Single Sign-On unavailable on Basic/Team plans.
+Asana	$10.99/user/mo	Enterprise Plan	SAML SSO locked behind Enterprise tier.
+Airtable	$20/user/mo	Enterprise Scale	SSO paywalled behind high-level Enterprise contracts.
+Datadog	Usage-based	Enterprise Tier	Pro plan lacks SAML enforcement; requires Enterprise contract.
+
+
+
+
+
+
+
+
+
+3).How to connect AD with Keyclock to fetch the users from AD
+
+1. Navigate to User Federation
+--------------------------------------------------------------------------------
+   • Log in to your Keycloak Admin Console.
+   • Select your realm (e.g., emipro) from the top-left dropdown menu.
+   • On the left sidebar menu, click "User federation".
+   • Click "Add provider" (or select "ldap" from the provider dropdown menu).
+
+
+
+
+
+2. Configure General & Connection Settings 
+--------------------------------------------------------------------------------
+   • Vendor: Select "Active Directory".
+     (Keycloak will automatically pre-fill standard AD attribute fields such as 
+      sAMAccountName and objectGUID).
+   • Connection URL: Enter your AD server's LDAP address:
+       - Standard LDAP: ldap://<your-ad-server-ip>:389
+       - Secure LDAPS:  ldaps://<your-ad-server-ip>:636
+   • Click the "Test connection" button to verify Keycloak can successfully 
+     reach the AD server.
+
+
+
+
+
+3. Configure Bind Credentials - AD Service Account
+--------------------------------------------------------------------------------
+   • Bind type: Set to "simple".
+   • Bind DN: Enter the Distinguished Name (DN) or User Principal Name (UPN) 
+     of a service account with read permissions for Active Directory.
+     Example: CN=KeycloakService,OU=ServiceAccounts,DC=domain,DC=com
+     (or serviceaccount@domain.com)
+   • Bind credentials: Type the password for this designated AD account.
+   • Click the "Test authentication" button to confirm credentials work.
+
+
+
+
+
+4. Set User LDAP Locations
+--------------------------------------------------------------------------------
+   • Users DN: Enter the base organizational unit path in AD where your users live.
+     Example: OU=Employees,DC=domain,DC=com
+   • Edit mode selection:
+       - Select READ_ONLY if you want Active Directory to manage all user changes.
+       - Select WRITABLE if you want profile and password updates in Keycloak 
+         to save directly back to Active Directory.
+
+
+
+	
+5. Save & Sync Users 
+--------------------------------------------------------------------------------
+   • Click the blue "Save" button at the bottom of the page.
+   • Scroll to the top or locate the "Action" button.
+   • Click Action -> Sync all users.
+  • Kerberos integration means (IF NEEDED for desktop/laptop sign in credential for)
+   • Once the synchronization process finishes, click the "Users" tab on the 
+     left sidebar menu to verify all Active Directory users are now listed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+4).CREATE A SSO FOR GEMINI
+
+    • In Keycloak, a Client is any application, service, or website that delegates its user authentication and authorization to Keycloak.
+      
+    • Many site used the SAML and many used the OIDC so for all site we need to  create diffrent client  (we can login onec in sso login page of keycloak for all client to use the sso)
+
+
+
+======================================================================
+PREREQUISITES:
+• A paid Google Workspace account (Business or Enterprise edition with Gemini enabled).
+• Super Admin access to Google Admin Console (admin.google.com).
+• Administrator access to your Keycloak server.
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+STEP 1: Create a SAML Profile in Google Admin Console
+-------------------------------------------------------- ------------------------
+1. Log in to the Google Admin Console at https://admin.google.com using a 
+   Super Admin account.
+2. Go to: Security -> Authentication -> SSO with third-party IdP.
+3. In the "Third-party SSO profiles" section, click "Add SAML profile".
+4. Enter a Name for the profile (e.g., "Keycloak SSO").
+5. In the "SP Details" section, note down the following two values (you will 
+   need them in Keycloak):
+     • Entity ID (e.g., https://www.google.com/a/your-domain.com or google.com)
+     • ACS URL   (e.g., https://www.google.com/a/your-domain.com/acs)
+6. Keep this Google Admin page open in your browser tab.
+
+
+
+
+
+--------------------------------------------------------------------------------
+STEP 2: Create the SAML Client in Keycloak
+--------------------------------------------------------------------------------
+1. Log in to your Keycloak Admin Console.
+2. Select your target Realm (e.g., emipro) from the top-left menu.
+3. Click "Clients" from the left sidebar and click "Create client".
+4. Configure the client settings:
+     • Client type: SAML
+     • Client ID: Enter the Google Entity ID you copied in Step 1 
+       (e.g., https://www.google.com/a/your-domain.com)
+5. Click "Save".
+6. In the Client Settings page, update the following fields:
+     • Valid redirect URIs: Enter the Google ACS URL from Step 1
+     • Master SAML Processing URL: Enter the Google ACS URL
+     • Force Name ID format: ON
+     • Name ID format: email
+     • Sign Documents: OFF
+     • Sign Assertions: ON
+7. Click "Save".
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+STEP 3: Export the Keycloak Certificate & Get SSO URLs
+--------------------------------------------------------------------------------
+1. In Keycloak, navigate to "Realm settings" from the left sidebar.
+2. Go to the "Keys" tab.
+3. Find the active "RS256" row (Use: SIG), click the "Certificate" button, and 
+   copy the raw certificate string.
+4. Open a plain text editor and format the certificate as follows:
+
+   -----BEGIN CERTIFICATE----- 
+   [Paste raw certificate content here]
+   -----END CERTIFICATE-----
+
+5. Save this file to your computer as "keycloak.crt".
+6. Note down your Keycloak SAML Endpoint URL:
+   https://<your-keycloak-domain>/realms/<realm-name>/protocol/saml
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+STEP 4: Complete SAML Setup in Google Admin Console
+--------------------------------------------------------------------------------
+1. Return to the Google Admin Console tab from Step 1.
+2. Under "IdP Details", enter the following:
+     • IdP Entity ID: https://<your-keycloak-domain>/realms/<realm-name>
+     • Sign-in page URL: https://<your-keycloak-domain>/realms/<realm-name>/protocol/saml
+     • Sign-out page URL: https://<your-keycloak-domain>/realms/<realm-name>/protocol/openid-connect/logout
+3. Click "Upload certificate" and select the "keycloak.crt" file created in Step 3.
+4. Click "Save".
+
+
+
+
+
+--------------------------------------------------------------------------------
+STEP 5: Assign SSO Profile to Workspace Users
+--------------------------------------------------------------------------------
+1. In Google Admin Console, go to: Security -> Authentication -> SSO with third-party IdP.
+2. Click "Manage SSO profile assignments".
+3. Select your Organizational Unit (OU) or select the top-level root organization 
+   to apply to all users.
+4. Select "Another SSO profile" and choose the Keycloak SAML profile created earlier.
+5. Click "Save".
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+STEP 6: Test Single Sign-On Flow
+--------------------------------------------------------------------------------
+1. Open an Incognito/Private browser window.
+2. Go to https://gemini.google.com and type your company email address.
+3. Google will automatically redirect you to your Keycloak login page.
+4. Type your Keycloak (or Active Directory) username and password.
+5. Upon successful authentication, Keycloak will grant access and redirect you 
+   directly into Gemini!
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+5).     KEYCLOAK SSO SETUP GUIDE: STANDARD SAAS
+                   (GitHub Enterprise, AWS, Slack, Salesforce)
+
+
+--------------------------------------------------------------------------------
+SECTION 1: GITHUB ENTERPRISE / ORGANIZATION (SAML 2.0)
+--------------------------------------------------------------------------------
+1. Keycloak Configuration:
+   • Go to Keycloak Admin Console -> Clients -> Create client.
+   • Client type: SAML
+   • Client ID: https://github.com/orgs/YOUR_ORGANIZATION_NAME
+   • Click Save.
+   • Under Client Settings:
+       - Valid redirect URIs: https://github.com/orgs/YOUR_ORGANIZATION_NAME/saml/consume
+       - Master SAML Processing URL: https://github.com/orgs/YOUR_ORGANIZATION_NAME/saml/consume
+       - Force Name ID format: ON
+       - Name ID format: email
+
+2. GitHub Configuration:
+   • Log in to GitHub -> Organization Settings -> Authentication security.
+   • Check "Enable SAML authentication".
+   • Single Sign-On URL: https://<your-keycloak-domain>/realms/<realm-name>/protocol/saml
+   • Issuer: https://<your-keycloak-domain>/realms/<realm-name>
+   • Public Certificate: Paste Keycloak RS256 Certificate (from Realm Settings -> Keys).
+   • Click "Test SAML configuration", then check "Require SAML SSO authentication".
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+SECTION 2: AWS MANAGEMENT CONSOLE (SAML 2.0)
+--------------------------------------------------------------------------------
+1. Keycloak Configuration:
+   • Go to Keycloak -> Clients -> Create client.
+   • Client type: SAML
+   • Client ID: urn:amazon:webservices
+   • Click Save.
+   • Under Client Settings:
+       - Valid redirect URIs: https://signin.aws.amazon.com/saml
+       - Master SAML Processing URL: https://signin.aws.amazon.com/saml
+       - Include AuthnStatement: ON
+       - Sign Documents: ON
+       - Sign Assertions: ON
+   • Under Client Scopes -> Dedicated scope -> Add Mappers:
+       - Mapper 1 (RoleSessionName):
+           * Name: RoleSessionName
+           * Mapper Type: User Property
+           * Property: email
+           * SAML Attribute Name: https://aws.amazon.com/SAML/attributes/roleSessionName
+       - Mapper 2 (AWS Role ARN):
+           * Name: Role
+           * Mapper Type: Hardcoded attribute
+           * SAML Attribute Name: https://aws.amazon.com/SAML/attributes/role
+           * Attribute Value: arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>,arn:aws:iam::<ACCOUNT_ID>:saml-provider/<PROVIDER_NAME>
+
+2. AWS IAM Configuration:
+   • Log in to AWS Management Console -> Open IAM -> Identity providers -> Add provider.
+   • Provider type: SAML | Provider name: Keycloak
+   • Metadata document: Upload Keycloak's IDP Metadata XML 
+     (Downloaded from Realm Settings -> General -> Endpoints -> SAML 2.0 Identity Provider Metadata).
+   • Create an IAM Role with a SAML 2.0 trust relationship linking to this Provider.
+
+
+
+
+
+
+ 	
+
+--------------------------------------------------------------------------------
+SECTION 3: SLACK BUSINESS+ / ENTERPRISE (SAML 2.0)
+--------------------------------------------------------------------------------
+1. Keycloak Configuration:
+   • Go to Keycloak -> Clients -> Create client.
+   • Client type: SAML | Client ID: https://slack.com
+   • Valid redirect URIs: https://your-workspace.slack.com/sso/saml
+   • Master SAML Processing URL: https://your-workspace.slack.com/sso/saml
+   • Force Name ID format: ON | Name ID format: email
+
+2. Slack Configuration:
+   • Go to Slack Admin Console (your-workspace.slack.com/admin) -> Settings -> Authentication.
+   • Click Configure next to SAML authentication.
+   • SAML 2.0 Endpoint (HTTP): https://<your-keycloak-domain>/realms/<realm-name>/protocol/saml
+   • Identity Provider Issuer: https://<your-keycloak-domain>/realms/<realm-name>
+   • Public Certificate: Paste Keycloak RS256 Certificate -> Save.
+
+
+
+
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+SECTION 4: SALESFORCE ENTERPRISE (SAML 2.0)
+--------------------------------------------------------------------------------
+1. Keycloak Configuration:
+   • Go to Keycloak -> Clients -> Create client.
+   • Client type: SAML | Client ID: https://yourdomain.my.salesforce.com
+   • Valid redirect URIs: https://yourdomain.my.salesforce.com/kc/saml
+   • Master SAML Processing URL: https://yourdomain.my.salesforce.com/kc/saml
+   • Force Name ID format: ON | Name ID format: username
+
+2. Salesforce Configuration:
+   • Log in to Salesforce -> Setup -> Security -> Single Sign-On Settings -> Click New.
+   • Issuer: https://<your-keycloak-domain>/realms/<realm-name>
+   • Identity Provider Certificate: Upload Keycloak Certificate.
+   • Entity ID: https://yourdomain.my.salesforce.com
+   • Identity Provider Login URL: https://<your-keycloak-domain>/realms/<realm-name>/protocol/saml
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+SECTION 5: GOOGLE MEET / GOOGLE WORKSPACE (SAML 2.0)
+--------------------------------------------------------------------------------
+1. Keycloak Configuration:
+   • Go to Keycloak -> Clients -> Create client.
+   • Client type: SAML | Client ID: https://www.google.com/a/yourdomain.com
+   • Valid redirect URIs: https://www.google.com/a/yourdomain.com/acs
+   • Master SAML Processing URL: https://www.google.com/a/yourdomain.com/acs
+   • Force Name ID format: ON | Name ID format: email
+   • Sign Assertions: ON | Sign Documents: OFF
+
+2. Google Meet / Admin Console Configuration:
+   • Log in to Google Admin Console (admin.google.com) -> Security -> Authentication -> SSO with third-party IdP.
+   • Click Add SAML profile -> Fill in:
+     - Sign-in page URL: https://<your-keycloak-domain>/realms/<realm-name>/protocol/saml
+     - Sign-out page URL: https://<your-keycloak-domain>/realms/<realm-name>/protocol/openid-connect/logout
+     - IdP Entity ID: https://<your-keycloak-domain>/realms/<realm-name>
+   • Upload Keycloak Certificate -> Click Save.
+   • Go to Manage SSO profile assignments -> Assign the SSO profile to your target Organizational Unit.
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+SECTION 6: MICROSOFT 365 / ENTRA ID (SAML 2.0 / WS-FED)
+--------------------------------------------------------------------------------
+1. Keycloak Configuration:
+   • Go to Keycloak -> Clients -> Create client.
+   • Client type: SAML | Client ID: urn:federation:MicrosoftOnline
+   • Valid redirect URIs: https://login.microsoftonline.com/login.srf
+   • Master SAML Processing URL: https://login.microsoftonline.com/login.srf
+   • Force Name ID format: ON | Name ID format: persistent (or email)
+   • Sign Assertions: ON | Sign Documents: ON
+   • Under Client Scopes -> Dedicated scope -> Add Mapper:
+     - Name: IDPEmail
+     - Mapper Type: User Property
+     - Property: email
+     - SAML Attribute Name: IDPEmail
+
+2. Microsoft 365 / Entra ID Configuration (via PowerShell):
+   • Connect to Microsoft Graph / MSOnline using Global Admin credentials:
+     Connect-MgGraph -Scopes "Domain.ReadWrite.All", "Directory.AccessAsUser.All"
+   • Configure domain federation pointing to Keycloak:
+     New-MgDomainFederationConfiguration -DomainId "yourdomain.com" `
+       -DisplayName "Keycloak SSO" `
+       -IssuerUri "https://<your-keycloak-domain>/realms/<realm-name>" `
+       -PassiveSignInUri "https://<your-keycloak-domain>/realms/<realm-name>/protocol/saml" `
+       -SigningCertificate "<Your-Keycloak-RS256-Certificate-Base64>" `
+       -PreferredAuthenticationProtocol "saml"
+   • Verify federation status:
+     Get-MgDomainFederationConfiguration -DomainId "yourdomain.com"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

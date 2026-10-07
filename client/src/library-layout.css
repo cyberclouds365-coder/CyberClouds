@@ -1,0 +1,31 @@
+.library-app {
+  --library-sidebar-width: 255px;
+}
+
+.library-sidebar {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.library-main {
+  width: calc(100% - var(--library-sidebar-width));
+  min-width: 0;
+}
+
+.reader-view,
+.source-reading-layout,
+.source-blocks {
+  min-width: 0;
+}
+
+@media (max-width: 950px) {
+  .library-app {
+    --library-sidebar-width: 220px;
+  }
+}
+
+@media (max-width: 700px) {
+  .library-app {
+    --library-sidebar-width: 0px;
+  }
+}
