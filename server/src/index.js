@@ -1101,14 +1101,7 @@ async function start() {
     console.warn('PostgreSQL is not configured. Accounts use temporary in-memory storage for local preview.');
   }
 
-
-app.get('/api', (req, res) => {
-  res.send('Server is active');
-});
-  // Add this route before app.listen()
-app.get('/api/back', (req, res) => {
-  res.status(200).send('OK');
-});
+app.get('/api/health', async (_request, response) => { ... });
 
 
   const server = app.listen(port, '0.0.0.0', () => console.log(`Fieldnotes API listening on http://0.0.0.0:${port}`));
