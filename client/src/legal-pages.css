@@ -12,6 +12,8 @@
 .legal-hero h1 span{color:#51bed2}
 .legal-hero p{max-width:610px;margin:0;color:#70839a;font-size:14px;line-height:1.75}
 .legal-hero small{display:inline-block;margin-top:19px;color:#91a2b5;font:9px var(--mono);letter-spacing:.15px}
+.legal-hero-contact{display:block;width:max-content;max-width:100%;margin-top:12px;color:#1551a2;font-size:12px;font-weight:700;text-decoration:none}
+.legal-hero-contact:hover{text-decoration:underline;text-underline-offset:3px}
 .legal-document{max-width:960px;margin:0 auto;padding:0 28px 78px}
 .legal-document>section{display:grid;grid-template-columns:44px minmax(0,1fr);gap:20px;padding:26px 0;border-top:1px solid #e0e9f2}
 .legal-section-number{padding-top:5px;color:#49aebe;font:10px var(--mono)}
@@ -50,6 +52,7 @@
   .legal-hero{padding:52px 21px 34px}
   .legal-hero h1{font-size:39px;letter-spacing:-1.4px}
   .legal-hero p{font-size:13px}
+  .legal-hero-contact{font-size:11px;overflow-wrap:anywhere}
   .legal-document{padding:0 21px 54px}
   .legal-document>section{grid-template-columns:26px minmax(0,1fr);gap:12px;padding:21px 0}
   .legal-document h2{font-size:15px}

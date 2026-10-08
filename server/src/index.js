@@ -69,7 +69,6 @@ const memoryUsers = [];
 const memorySignupVerifications = new Map();
 const memorySessions = new Map();
 const memoryFeedback = [];
-const memoryReferralShares = [];
 const memoryPasswordResets = new Map();
 let nextMemoryUserId = 1;
 let sesTransporter;
@@ -388,7 +387,7 @@ async function getReferralStats(userId) {
   const code = await ensureReferralCode(userId);
   if (pool) {
     const result = await pool.query(`SELECT account.referral_code, account.referral_rewarded,
-        stats.registrations, stats.logins, stats.purchases, shares.shares
+        stats.registrations, stats.logins, stats.purchases, pending.pending_uses
       FROM app_users account
       LEFT JOIN LATERAL (
         SELECT COUNT(*)::int AS registrations,
@@ -397,8 +396,9 @@ async function getReferralStats(userId) {
         FROM app_users WHERE referred_by_user_id = account.id AND role = 'user'
       ) stats ON TRUE
       LEFT JOIN LATERAL (
-        SELECT COUNT(*)::int AS shares FROM referral_share_events WHERE user_id = account.id
-      ) shares ON TRUE
+        SELECT COUNT(*)::int AS pending_uses FROM signup_verifications
+        WHERE referred_by_user_id = account.id AND expires_at > NOW()
+      ) pending ON TRUE
       WHERE account.id = $1`, [userId]);
     const account = result.rows[0];
     return {
@@ -406,51 +406,60 @@ async function getReferralStats(userId) {
       registrations: account?.registrations || 0,
       logins: account?.logins || 0,
       purchases: account?.purchases || 0,
-      shares: account?.shares || 0,
+      shares: (account?.registrations || 0) + (account?.pending_uses || 0),
       rewardUnlocked: Boolean(account?.referral_rewarded),
     };
   }
   const account = memoryUsers.find((user) => String(user.id) === String(userId));
   const referredUsers = memoryUsers.filter((user) => String(user.referred_by_user_id) === String(userId) && user.role === 'user');
+  const pendingReferralUses = [...memorySignupVerifications.values()].filter((pending) =>
+    String(pending.referred_by_user_id) === String(userId) && new Date(pending.expires_at).getTime() > Date.now()).length;
   return {
     code: code || account?.referral_code || null,
     registrations: referredUsers.length,
     logins: referredUsers.filter((user) => Number(user.login_count || 0) > 0).length,
     purchases: referredUsers.filter((user) => user.payment_done).length,
-    shares: memoryReferralShares.filter((share) => String(share.userId) === String(userId)).length,
+    shares: referredUsers.length + pendingReferralUses,
     rewardUnlocked: Boolean(account?.referral_rewarded),
   };
 }
 
-async function getAdminReferralSummary() {
+async function getAdminReferralSummary(currentUserId) {
   if (pool) {
-    const [overviewResult, referralsResult] = await Promise.all([
+    const [overviewResult, currentUserOnlineResult, referralsResult] = await Promise.all([
       pool.query(`SELECT
         (SELECT COUNT(*)::int FROM app_users WHERE role = 'user') AS total_users,
         (SELECT COUNT(DISTINCT active_session.user_id)::int FROM auth_sessions active_session JOIN app_users u ON u.id = active_session.user_id
           WHERE active_session.expires_at > NOW() AND active_session.last_seen_at > NOW() - INTERVAL '5 minutes' AND u.is_active = TRUE) AS online_users,
-        (SELECT COUNT(*)::int FROM referral_share_events) AS referral_shares,
+        ((SELECT COUNT(*)::int FROM app_users WHERE referred_by_user_id IS NOT NULL AND role = 'user')
+          + (SELECT COUNT(*)::int FROM signup_verifications WHERE referred_by_user_id IS NOT NULL AND expires_at > NOW())) AS referral_shares,
         (SELECT COUNT(*)::int FROM app_users WHERE referred_by_user_id IS NOT NULL AND role = 'user') AS referral_registrations,
         (SELECT COUNT(*)::int FROM app_users WHERE referred_by_user_id IS NOT NULL AND role = 'user' AND login_count > 0) AS referral_logins,
         (SELECT COUNT(*)::int FROM app_users WHERE referred_by_user_id IS NOT NULL AND role = 'user' AND payment_done = TRUE) AS referral_purchases`),
+      pool.query(`SELECT EXISTS (
+        SELECT 1 FROM auth_sessions active_session JOIN app_users account ON account.id = active_session.user_id
+        WHERE active_session.user_id = $1 AND active_session.expires_at > NOW()
+          AND active_session.last_seen_at > NOW() - INTERVAL '5 minutes' AND account.is_active = TRUE
+      ) AS is_online`, [currentUserId]),
       pool.query(`SELECT owner.id, owner.name, owner.email, owner.referral_rewarded,
-          COALESCE(shares.share_count, 0)::int AS shares,
+          (COUNT(referred.id) + COALESCE(pending.pending_count, 0))::int AS shares,
           COUNT(referred.id)::int AS registrations,
           COUNT(referred.id) FILTER (WHERE referred.login_count > 0)::int AS logins,
           COUNT(referred.id) FILTER (WHERE referred.payment_done = TRUE)::int AS purchases
         FROM app_users owner
         LEFT JOIN app_users referred ON referred.referred_by_user_id = owner.id AND referred.role = 'user'
-        LEFT JOIN (SELECT user_id, COUNT(*)::int AS share_count FROM referral_share_events GROUP BY user_id) shares ON shares.user_id = owner.id
+        LEFT JOIN (SELECT referred_by_user_id, COUNT(*)::int AS pending_count FROM signup_verifications
+          WHERE referred_by_user_id IS NOT NULL AND expires_at > NOW() GROUP BY referred_by_user_id) pending ON pending.referred_by_user_id = owner.id
         WHERE owner.role = 'user'
-        GROUP BY owner.id, shares.share_count
-        HAVING COUNT(referred.id) > 0 OR COALESCE(shares.share_count, 0) > 0
+        GROUP BY owner.id, pending.pending_count
+        HAVING COUNT(referred.id) > 0 OR COALESCE(pending.pending_count, 0) > 0
         ORDER BY registrations DESC, shares DESC, owner.created_at`),
     ]);
     const overview = overviewResult.rows[0];
     return {
       overview: {
         totalUsers: overview.total_users,
-        onlineUsers: overview.online_users,
+        onlineUsers: overview.online_users + (currentUserOnlineResult.rows[0].is_online ? 0 : 1),
         referralShares: overview.referral_shares,
         referralRegistrations: overview.referral_registrations,
         referralLogins: overview.referral_logins,
@@ -469,9 +478,12 @@ async function getAdminReferralSummary() {
     .filter((session) => memoryUsers.some((user) => String(user.id) === String(session.userId) && user.is_active))
     .map((session) => String(session.userId)));
   const referred = memoryUsers.filter((user) => user.role === 'user' && user.referred_by_user_id);
+  const pendingReferralUses = [...memorySignupVerifications.values()].filter((pending) =>
+    pending.referred_by_user_id && new Date(pending.expires_at).getTime() > Date.now());
   const referrals = memoryUsers.filter((owner) => owner.role === 'user').map((owner) => {
     const referredUsers = referred.filter((user) => String(user.referred_by_user_id) === String(owner.id));
-    const shares = memoryReferralShares.filter((event) => String(event.userId) === String(owner.id)).length;
+    const pendingUsesForOwner = pendingReferralUses.filter((pending) => String(pending.referred_by_user_id) === String(owner.id)).length;
+    const shares = referredUsers.length + pendingUsesForOwner;
     return {
       id: owner.id, name: owner.name, email: owner.email,
       referralRewarded: Boolean(owner.referral_rewarded), shares,
@@ -484,8 +496,8 @@ async function getAdminReferralSummary() {
   return {
     overview: {
       totalUsers: memoryUsers.filter((user) => user.role === 'user').length,
-      onlineUsers: onlineUserIds.size,
-      referralShares: memoryReferralShares.length,
+      onlineUsers: onlineUserIds.has(String(currentUserId)) ? onlineUserIds.size : onlineUserIds.size + 1,
+      referralShares: referred.length + pendingReferralUses.length,
       referralRegistrations: referred.length,
       referralLogins: referred.filter((user) => Number(user.login_count || 0) > 0).length,
       referralPurchases: referred.filter((user) => user.payment_done).length,
@@ -586,23 +598,16 @@ function emailTransporter() {
     pass: process.env.BREVO_SMTP_PASS,
     from: process.env.MAIL_FROM,
   };
-  const settingNames = {
-    host: 'BREVO_SMTP_HOST',
-    port: 'BREVO_SMTP_PORT',
-    user: 'BREVO_SMTP_USER',
-    pass: 'BREVO_SMTP_PASS',
-    from: 'MAIL_FROM',
-  };
-  const missing = Object.entries(settings).filter(([, value]) => !value?.trim()).map(([key]) => settingNames[key]);
+  const missing = Object.values(settings).filter((value) => !value?.trim());
   if (missing.length) {
-    const error = new Error(`Brevo email is missing ${missing.join(', ')} in the server environment. .env.example is only a template.`);
+    const error = new Error('Email delivery is temporarily unavailable. Please try again later.');
     error.statusCode = 503;
     throw error;
   }
   if (!sesTransporter) {
     const portNumber = Number(settings.port);
     if (!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65535) {
-      const error = new Error('BREVO_SMTP_PORT must be a valid SMTP port');
+      const error = new Error('Email delivery is temporarily unavailable. Please try again later.');
       error.statusCode = 503;
       throw error;
     }
@@ -642,11 +647,8 @@ async function sendBrandedEmail({ to, subject, text, html }) {
     });
   } catch (cause) {
     if (cause.statusCode) throw cause;
-    console.error('CyberClouds email delivery failed:', cause.code || 'unknown', cause.responseCode || 'no SMTP response code');
-    const message = Number(cause.responseCode) === 525
-      ? "Brevo blocked this server's IP (SMTP 525). Authorize the server's outbound IP in Brevo Settings > Security > Authorized IPs, then try again."
-      : 'Email delivery is temporarily unavailable. Check the Brevo SMTP settings and try again.';
-    const error = new Error(message);
+    console.error('Transactional email delivery failed:', cause.code || 'unknown', cause.responseCode || 'no upstream status');
+    const error = new Error('Email delivery is temporarily unavailable. Please try again later.');
     error.statusCode = 503;
     throw error;
   }
@@ -751,7 +753,7 @@ async function sendPasswordResetCode(email, code, otpHash) {
   } catch (error) {
     if (pool) await pool.query('DELETE FROM password_reset_verifications WHERE email = $1 AND otp_hash = $2', [email, otpHash]).catch(() => {});
     else if (memoryPasswordResets.get(email)?.otp_hash === otpHash) memoryPasswordResets.delete(email);
-    console.error('Password reset email could not be sent:', error.message);
+    console.error('Password reset email delivery failed:', error.statusCode || 'unavailable');
   }
 }
 
@@ -941,11 +943,11 @@ app.post('/api/auth/forgot-password', passwordResetRequestLimiter, async (reques
     if (account?.is_active) {
       const code = String(randomInt(100000, 1000000));
       const otpHash = await storePasswordResetCode(email, code);
-      if (otpHash) void sendPasswordResetCode(email, code, otpHash);
+      if (otpHash) void sendPasswordResetCode(email, code, otpHash).catch(() => {});
     }
     const remainingDelay = 300 - (Date.now() - requestStartedAt);
     if (remainingDelay > 0) await new Promise((resolve) => setTimeout(resolve, remainingDelay));
-    response.status(202).json({ message: 'If an active account uses that email, a verification code is on its way.' });
+    response.status(202).json({ message: 'If an active account uses this address, a verification code will arrive shortly.' });
   } catch (error) { next(error); }
 });
 
@@ -1063,16 +1065,6 @@ app.post('/api/feedback', requireAuth, async (request, response, next) => {
 app.get('/api/referrals/me', requireAuth, async (request, response, next) => {
   try { response.json({ referral: await getReferralStats(request.user.id) }); }
   catch (error) { next(error); }
-});
-
-app.post('/api/referrals/share', requireAuth, async (request, response, next) => {
-  if (request.user.role !== 'user') return response.status(403).json({ error: 'Referral links are available to learner accounts' });
-  try {
-    if (pool) await pool.query('INSERT INTO referral_share_events (user_id) VALUES ($1)', [request.user.id]);
-    else memoryReferralShares.push({ userId: request.user.id, createdAt: new Date().toISOString() });
-    const referral = await getReferralStats(request.user.id);
-    response.status(201).json({ shares: referral.shares });
-  } catch (error) { next(error); }
 });
 
 app.patch('/api/profile', requireAuth, async (request, response, next) => {
@@ -1363,7 +1355,7 @@ app.get('/api/content/:id/source', requireAuth, async (request, response, next) 
     response.type('image/svg+xml').attachment(`${makeSlug(document.title) || 'diagram'}.svg`).send(document.content);
   } catch (error) { next(error); }
 });
-app.get('/api/admin/users', requireAuth, requireAdmin, async (_request, response, next) => {
+app.get('/api/admin/users', requireAuth, requireAdmin, async (request, response, next) => {
   try {
     const now = Date.now();
     const memoryOnlineIds = new Set([...memorySessions.values()]
@@ -1378,10 +1370,10 @@ app.get('/api/admin/users', requireAuth, requireAdmin, async (_request, response
                 AND active_session.last_seen_at > NOW() - INTERVAL '5 minutes') AS is_online
           FROM app_users account ORDER BY account.created_at, account.id`)
         : Promise.resolve({ rows: memoryUsers.map(({ password_hash: _hash, ...user }) => ({ ...user, is_online: Boolean(user.is_active && memoryOnlineIds.has(String(user.id))) })) }),
-      getAdminReferralSummary(),
+      getAdminReferralSummary(request.user.id),
     ]);
     response.json({
-      users: result.rows.map((row) => ({ ...publicUser(row), isOnline: Boolean(row.is_active && row.is_online), createdAt: row.created_at || row.createdAt })),
+      users: result.rows.map((row) => ({ ...publicUser(row), isOnline: Boolean(row.is_active && (row.is_online || String(row.id) === String(request.user.id))), createdAt: row.created_at || row.createdAt })),
       ...referralSummary,
     });
   } catch (error) { next(error); }
@@ -1411,12 +1403,12 @@ app.patch('/api/admin/users/:id/payment', requireAuth, requireAdmin, async (requ
       await sendPaymentConfirmation(account);
       response.json({ user: publicUser(account), emailSent: true, referralRewardGrantedTo });
     } catch (emailError) {
-      console.error(`Payment confirmation email failed for ${account.email}:`, emailError.message);
+      console.error('Payment confirmation email delivery failed:', emailError.statusCode || 'unavailable');
       response.json({
         user: publicUser(account),
         emailSent: false,
         referralRewardGrantedTo,
-      message: 'Payment was marked complete, but the email could not be sent. Check the Brevo SMTP settings and click the payment button again to retry.',
+      message: 'Payment was marked complete, but the confirmation email could not be sent. Please retry later.',
       });
     }
   } catch (error) { next(error); }
@@ -1541,9 +1533,14 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (request, response
 
 app.use((error, _request, response, _next) => {
   if (error.code === '23505') return response.status(409).json({ error: 'An account with this email already exists' });
-  if (error.statusCode) return response.status(error.statusCode).json({ error: error.message });
+  if (error.statusCode) {
+    const statusCode = Number(error.statusCode);
+    if (!Number.isInteger(statusCode) || statusCode < 400 || statusCode > 599) return response.status(500).json({ error: 'Something went wrong. Please try again later.' });
+    if (statusCode >= 500) return response.status(503).json({ error: 'Service temporarily unavailable. Please try again later.' });
+    return response.status(statusCode).json({ error: error.message });
+  }
   console.error(error);
-  response.status(500).json({ error: 'Internal server error' });
+  response.status(500).json({ error: 'Something went wrong. Please try again later.' });
 });
 
 async function start() {
@@ -1560,7 +1557,7 @@ async function start() {
     let appUrl;
     try { appUrl = new URL(process.env.APP_URL); } catch { throw new Error('APP_URL must be the public HTTPS origin of the client'); }
     if (appUrl.protocol !== 'https:' || appUrl.pathname !== '/' || appUrl.search || appUrl.hash) throw new Error('APP_URL must be the public HTTPS origin of the client, without a path');
-    if (!hasEmailSettings()) throw new Error('Complete all Brevo SMTP production environment variables');
+    if (!hasEmailSettings()) throw new Error('Email delivery configuration is incomplete');
   }
   if (production && !databaseUrl) throw new Error('DATABASE_URL is required in production; in-memory storage is only for local preview');
   validateDatabaseUrl(databaseUrl);
