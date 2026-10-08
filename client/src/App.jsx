@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Check, ChevronLeft, Cloud, Eye, EyeOff, KeyRound, LogOut, Mail, Menu, Monitor, Network, Plus, Save, Shield, Terminal, Trash2, UserRound, X } from 'lucide-react';
+import { BookOpen, Check, ChevronLeft, Cloud, Copy, Eye, EyeOff, Gift, KeyRound, LogOut, Mail, Menu, Monitor, Network, Plus, Save, Search, Shield, Star, Terminal, Trash2, UserRound, X } from 'lucide-react';
 import { createSourceOutline, parseSourceText } from './sourceFormatting.js';
 import { paymentSettings } from './paymentConfig.js';
 import GoogleAd from './GoogleAd.jsx';
@@ -115,6 +115,8 @@ function App() {
   const [profilePasswordError, setProfilePasswordError] = useState('');
   const [profilePasswordNotice, setProfilePasswordNotice] = useState('');
   const [users, setUsers] = useState([]);
+  const [adminOverview, setAdminOverview] = useState({ totalUsers: 0, onlineUsers: 0, referralShares: 0, referralRegistrations: 0, referralLogins: 0, referralPurchases: 0 });
+  const [adminReferralRows, setAdminReferralRows] = useState([]);
   const [adminTab, setAdminTab] = useState('content');
   const [adminSections, setAdminSections] = useState([]);
   const [adminDocuments, setAdminDocuments] = useState([]);
@@ -130,6 +132,15 @@ function App() {
   const [adminNotice, setAdminNotice] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [logoutFeedbackOpen, setLogoutFeedbackOpen] = useState(false);
+  const [logoutRating, setLogoutRating] = useState(0);
+  const [logoutComment, setLogoutComment] = useState('');
+  const [logoutFeedbackError, setLogoutFeedbackError] = useState('');
+  const [logoutFeedbackBusy, setLogoutFeedbackBusy] = useState(false);
+  const [adminUserSearch, setAdminUserSearch] = useState('');
+  const [referralStats, setReferralStats] = useState(null);
+  const [referralNotice, setReferralNotice] = useState('');
+  const [referralCodeInput, setReferralCodeInput] = useState(() => new URLSearchParams(window.location.search).get('ref') || '');
 
   useEffect(() => {
     const syncRoute = () => setPublicRoute(window.location.pathname);
@@ -155,11 +166,42 @@ function App() {
 
   useEffect(() => {
     if (!user || user.role === 'admin') return undefined;
-    const refreshAccount = () => request('/api/auth/me').then((result) => setUser(result.user)).catch(() => {});
+    const refreshAccount = async () => {
+      try {
+        const result = await request('/api/auth/me');
+        setUser(result.user);
+        if (profileOpen) {
+          const referralResult = await request('/api/referrals/me');
+          setReferralStats(referralResult.referral);
+        }
+      } catch {}
+    };
     const timer = window.setInterval(refreshAccount, 10000);
     window.addEventListener('focus', refreshAccount);
     return () => { window.clearInterval(timer); window.removeEventListener('focus', refreshAccount); };
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, profileOpen]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    const heartbeat = () => request('/api/auth/heartbeat', { method: 'POST' }).catch(() => {});
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 30000);
+    window.addEventListener('focus', heartbeat);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', heartbeat); };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!adminOpen || adminTab !== 'users' || user?.role !== 'admin') return undefined;
+    const refreshUsers = async () => {
+      try {
+        const result = await request('/api/admin/users');
+        applyAdminUserData(result);
+      } catch {}
+    };
+    refreshUsers();
+    const timer = window.setInterval(refreshUsers, 30000);
+    return () => window.clearInterval(timer);
+  }, [adminOpen, adminTab, user?.id, user?.role]);
 
   function navigate(path) {
     window.history.pushState({}, '', path);
@@ -255,15 +297,97 @@ function App() {
     }
   }
 
-  async function signOut() {
+  function signOut() {
+    setLogoutRating(0);
+    setLogoutComment('');
+    setLogoutFeedbackError('');
+    setLogoutFeedbackOpen(true);
+  }
+
+  async function finishSignOut() {
     await request('/api/auth/logout', { method: 'POST' }).catch(() => {});
     setUser(null);
     setAdminOpen(false);
     setProfileOpen(false);
+    setLogoutFeedbackOpen(false);
+    setReferralStats(null);
+    setReferralNotice('');
     setArticle(null);
     setActiveDocument(null);
     window.history.replaceState({}, '', '/');
     setPublicRoute('/');
+  }
+
+  async function submitLogoutFeedback(event) {
+    event.preventDefault();
+    if (!logoutRating) {
+      setLogoutFeedbackError('Choose a rating before you sign out, or skip feedback.');
+      return;
+    }
+    setLogoutFeedbackBusy(true);
+    setLogoutFeedbackError('');
+    try {
+      await request('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: logoutRating, comment: logoutComment }),
+      });
+      await finishSignOut();
+    } catch (error) {
+      setLogoutFeedbackError(error.message);
+    } finally {
+      setLogoutFeedbackBusy(false);
+    }
+  }
+
+  async function openProfile() {
+    setProfileOpen(true);
+    setAdminOpen(false);
+    setMobileOpen(false);
+    setProfileError('');
+    setProfileNotice('');
+    setProfilePasswordError('');
+    setProfilePasswordNotice('');
+    setReferralNotice('');
+    try {
+      const [referralResult, accountResult] = await Promise.all([request('/api/referrals/me'), request('/api/auth/me')]);
+      setReferralStats(referralResult.referral);
+      setUser(accountResult.user);
+    } catch {
+      setReferralStats(null);
+    }
+  }
+
+  async function copyReferralLink() {
+    const code = referralStats?.code || user?.referralCode;
+    if (!code) return;
+    const link = `${window.location.origin}/signup?ref=${encodeURIComponent(code)}`;
+    let action = '';
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Join my course', text: 'Sign up with my referral code to join the course.', url: link });
+        action = 'shared';
+      } else {
+        await navigator.clipboard.writeText(link);
+        action = 'copied';
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      try {
+        await navigator.clipboard.writeText(link);
+        action = 'copied';
+      } catch {
+        setReferralNotice(link);
+        return;
+      }
+    }
+    try {
+      const result = await request('/api/referrals/share', { method: 'POST' });
+      setReferralStats((current) => current ? { ...current, shares: result.shares } : current);
+      setReferralNotice(action === 'shared' ? 'Invite shared.' : 'Referral link copied.');
+    } catch {
+      setReferralNotice(action === 'shared' ? 'Invite shared, but its count could not refresh.' : 'Link copied, but its count could not refresh.');
+    }
   }
 
   async function saveProfile(event) {
@@ -315,6 +439,12 @@ function App() {
     }
   }
 
+  function applyAdminUserData(result) {
+    setUsers(result.users || []);
+    setAdminOverview(result.overview || { totalUsers: 0, onlineUsers: 0, referralShares: 0, referralRegistrations: 0, referralLogins: 0, referralPurchases: 0 });
+    setAdminReferralRows(result.referrals || []);
+  }
+
   async function openAdmin() {
     setAdminOpen(true);
     setMobileOpen(false);
@@ -322,7 +452,7 @@ function App() {
     setAdminPreview(null);
     try {
       const [userResult, contentResult] = await Promise.all([request('/api/admin/users'), request('/api/admin/content')]);
-      setUsers(userResult.users);
+      applyAdminUserData(userResult);
       setAdminSections(contentResult.sections);
       setAdminDocuments(contentResult.documents);
       setSelectedAdminSection((current) => contentResult.sections.some((section) => section.slug === current) ? current : contentResult.sections[0]?.slug || '');
@@ -421,7 +551,7 @@ function App() {
       await request(`/api/admin/users/${editingUser.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: editingUser.name, email: editingUser.email }) });
       setEditingUser(null);
       const result = await request('/api/admin/users');
-      setUsers(result.users);
+      applyAdminUserData(result);
     } catch (error) { setAdminError(error.message); }
   }
 
@@ -433,7 +563,7 @@ function App() {
       await request('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(form.entries())) });
       setCreateUserOpen(false);
       const result = await request('/api/admin/users');
-      setUsers(result.users);
+      applyAdminUserData(result);
     } catch (error) { setAdminError(error.message); }
   }
 
@@ -443,7 +573,7 @@ function App() {
       await request(`/api/admin/users/${account.id}`, { method: 'DELETE' });
       setDeleteTarget(null);
       const result = await request('/api/admin/users');
-      setUsers(result.users);
+      applyAdminUserData(result);
     } catch (error) { setAdminError(error.message); }
   }
 
@@ -456,7 +586,7 @@ function App() {
         body: JSON.stringify({ role }),
       });
       const result = await request('/api/admin/users');
-      setUsers(result.users);
+      applyAdminUserData(result);
     } catch (error) {
       setAdminError(error.message);
     }
@@ -467,7 +597,7 @@ function App() {
     try {
       await request(`/api/admin/users/${account.id}/active`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive }) });
       const result = await request('/api/admin/users');
-      setUsers(result.users);
+      applyAdminUserData(result);
     } catch (error) { setAdminError(error.message); }
   }
 
@@ -477,11 +607,13 @@ function App() {
     try {
       const paymentResult = await request(`/api/admin/users/${account.id}/payment`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paymentDone }) });
       const usersResult = await request('/api/admin/users');
-      setUsers(usersResult.users);
+      applyAdminUserData(usersResult);
       if (paymentDone) {
-        setAdminNotice(paymentResult.emailSent
+        const confirmation = paymentResult.emailSent
           ? `Payment confirmed and an email was sent to ${account.email}.`
-          : paymentResult.message || `Payment is confirmed, but the email could not be sent to ${account.email}.`);
+          : paymentResult.message || `Payment is confirmed, but the email could not be sent to ${account.email}.`;
+        const referralNotice = paymentResult.referralRewardGrantedTo ? ` ${paymentResult.referralRewardGrantedTo.name} also unlocked the free course through referrals.` : '';
+        setAdminNotice(`${confirmation}${referralNotice}`);
       }
     } catch (error) { setAdminError(error.message); }
   }
@@ -492,10 +624,12 @@ function App() {
     try {
       const paymentResult = await request(`/api/admin/users/${account.id}/payment`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paymentDone: true }) });
       const usersResult = await request('/api/admin/users');
-      setUsers(usersResult.users);
-      setAdminNotice(paymentResult.emailSent
+      applyAdminUserData(usersResult);
+      const confirmation = paymentResult.emailSent
         ? `Payment confirmation email sent to ${account.email}.`
-        : paymentResult.message || `The payment email could not be sent to ${account.email}.`);
+        : paymentResult.message || `The payment email could not be sent to ${account.email}.`;
+      const referralNotice = paymentResult.referralRewardGrantedTo ? ` ${paymentResult.referralRewardGrantedTo.name} also unlocked the free course through referrals.` : '';
+      setAdminNotice(`${confirmation}${referralNotice}`);
     } catch (error) { setAdminError(error.message); }
   }
 
@@ -526,13 +660,14 @@ function App() {
             </form> : <form className="auth-form" onSubmit={handleAuth}>
               {signingUp && <label>Full name<input name="name" type="text" autoComplete="name" minLength="2" maxLength="100" required placeholder="Your name" /></label>}
               <label>Email address<input name="email" type="email" autoComplete="email" required placeholder="name@example.com" /></label>
+              {signingUp && <label>Referral code (optional)<input name="referralCode" type="text" autoComplete="off" value={referralCodeInput} onChange={(event) => setReferralCodeInput(event.target.value.toUpperCase().replace(/[^A-F0-9]/g, '').slice(0, 10))} placeholder="Enter a friend's code" /></label>}
               <PasswordField label="Password" name="password" autoComplete={signingUp ? 'new-password' : 'current-password'} minLength={signingUp ? 8 : undefined} placeholder={signingUp ? 'Create a strong password' : 'Your password'} />
               {signingUp && <p className="password-rule">Use 8+ characters with uppercase, lowercase, a number, and a symbol.</p>}
               {authError && <div className="form-alert" role="alert">{authError}</div>}
               {authNotice && <div className="success-alert" role="status">{authNotice}</div>}
               <button className="primary-button" disabled={authBusy}>{authBusy ? 'Please wait...' : signingUp ? 'Send verification code' : 'Sign in'}<span>→</span></button>
             </form>}
-            {signingUp ? <p className="role-note"><Shield size={14} /> Email verification activates your reader account. Payment unlocks every module.</p> : demo ? <p className="demo-note">Local preview only: accounts use temporary in-memory storage.</p> : <p className="demo-note">Sign in with your CyberClouds account.</p>}
+            {signingUp ? <p className="role-note"><Shield size={14} /> Verify your email to activate the account. Refer 10 learners; when one purchase is confirmed, your full course is free.</p> : demo ? <p className="demo-note">Local preview only: accounts use temporary in-memory storage.</p> : <p className="demo-note">Sign in with your CyberClouds account.</p>}
           </div>
           <span className="auth-footer">CYBERCLOUDS / PRIVATE ACCESS</span>
         </section>
@@ -543,7 +678,7 @@ function App() {
       <header className="home-nav"><a className="home-brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}><span className="brand-symbol cyber-logo-mark"><Cloud size={20} /><Shield size={10} /></span><span>cyberclouds</span></a><nav><a href="#library-preview">Explore</a><a href="#about-clouds">About</a></nav><div className="home-auth-actions"><button className="home-signin" onClick={() => navigate('/login')}>Sign in</button><button className="home-join" onClick={() => navigate('/signup')}>Join CyberClouds <span>→</span></button></div></header>
       <section className="home-hero"><div className="home-hero-copy"><div className="home-eyebrow"><span />YOUR SYSTEMS, IN ONE PLACE</div><h1>Make sense of<br />the <em>cloud around you.</em></h1><p>A personal knowledge base for the tools, networks, hardware, and cloud systems you work with every day.</p><div className="home-hero-actions"><button className="home-join large" onClick={() => navigate('/signup')}>Open your workspace <span>→</span></button><button className="home-text-link" onClick={() => navigate('/login')}>I already have an account <span>↗</span></button></div><div className="hero-assurance"><Shield size={15} /><span>Private accounts · Reader access by default</span></div></div><div className="cloud-visual" aria-hidden="true"><div className="cloud-ring ring-one" /><div className="cloud-ring ring-two" /><div className="cloud-core"><Cloud size={51} strokeWidth={1.25} /><span>CC</span></div><div className="cloud-node node-os"><Monitor size={16} /><span>OS</span></div><div className="cloud-node node-network"><Network size={16} /><span>NETWORK</span></div><div className="cloud-node node-key"><KeyRound size={16} /><span>IDENTITY</span></div><div className="cloud-node node-aws"><Cloud size={16} /><span>CLOUD</span></div><div className="cloud-orbit orbit-dot-one" /><div className="cloud-orbit orbit-dot-two" /></div><div className="hero-bottom-label"><span>01 / YOUR KNOWLEDGE, CONNECTED</span><span>SCROLL TO EXPLORE ↓</span></div></section>
      <GoogleAd slotId="5649539153" />
-      <section className="home-library-preview" id="library-preview"><div className="home-section-heading"><div><span className="home-section-kicker">THE CYBERCLOUDS LIBRARY</span><h2>Everything has<br />its own place<span>.</span></h2></div><p>Explore our many learning modules, with practical notes and diagrams across the systems you use. New accounts can start with one module; full access opens after payment is marked complete.</p></div><div className="home-topic-grid">{[{ icon: Monitor, num: '01', title: 'Operating systems', desc: 'Linux, Windows, processes, storage, and the hardware beneath.' }, { icon: Network, num: '02', title: 'Networking + hardware', desc: 'Protocols, switches, office topology, components, and diagrams.' }, { icon: KeyRound, num: '03', title: 'Identity + Keycloak', desc: 'SSO, federation, authentication, and access control notes.' }, { icon: Terminal, num: '04', title: 'Commands', desc: 'A searchable field guide to your everyday terminal toolkit.' }, { icon: Cloud, num: '05', title: 'AWS + cloud', desc: 'Cloud concepts, services, and your AWS learning notes.' }].map(({ icon: Icon, num, title, desc }) => <article className="home-topic" key={num}><span className="topic-top"><span>{num}</span><Icon size={19} /></span><h3>{title}</h3><p>{desc}</p></article>)}</div></section><section className="home-about" id="about-clouds"><div className="about-signal"><span className="signal-line" /><span>BUILT AROUND YOUR NOTES</span></div><div><h2>Your learning,<br /><em>not lost in tabs.</em></h2><p>CyberClouds brings your technical notes and original diagrams into a calm, structured space. Sign up as a reader, find what you need, and keep building your own understanding.</p><button className="home-text-link" onClick={() => navigate('/signup')}>Get started with CyberClouds <span>→</span></button></div><div className="about-stats"><div><strong>05</strong><span>TOPIC AREAS</span></div><div><strong>01</strong><span>CONNECTED LIBRARY</span></div><div><strong>∞</strong><span>ROOM TO LEARN</span></div></div></section><footer className="home-footer"><a className="home-brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}><span className="brand-symbol cyber-logo-mark"><Cloud size={18} /><Shield size={9} /></span><span>cyberclouds</span></a><span>PRIVATE KNOWLEDGE / CONNECTED SYSTEMS</span><button onClick={() => navigate('/login')}>Sign in <span>↗</span></button></footer>
+      <section className="home-library-preview" id="library-preview"><div className="home-section-heading"><div><span className="home-section-kicker">THE CYBERCLOUDS LIBRARY</span><h2>Everything has<br />its own place<span>.</span></h2></div><p>Explore practical notes and diagrams across the systems you use. New accounts start with one module; pay for full access or refer 10 learners and earn it free when one purchase is confirmed.</p></div><div className="home-topic-grid">{[{ icon: Monitor, num: '01', title: 'Operating systems', desc: 'Linux, Windows, processes, storage, and the hardware beneath.' }, { icon: Network, num: '02', title: 'Networking + hardware', desc: 'Protocols, switches, office topology, components, and diagrams.' }, { icon: KeyRound, num: '03', title: 'Identity + Keycloak', desc: 'SSO, federation, authentication, and access control notes.' }, { icon: Terminal, num: '04', title: 'Commands', desc: 'A searchable field guide to your everyday terminal toolkit.' }, { icon: Cloud, num: '05', title: 'AWS + cloud', desc: 'Cloud concepts, services, and your AWS learning notes.' }].map(({ icon: Icon, num, title, desc }) => <article className="home-topic" key={num}><span className="topic-top"><span>{num}</span><Icon size={19} /></span><h3>{title}</h3><p>{desc}</p></article>)}</div></section><section className="home-about" id="about-clouds"><div className="about-signal"><span className="signal-line" /><span>BUILT AROUND YOUR NOTES</span></div><div><h2>Your learning,<br /><em>not lost in tabs.</em></h2><p>CyberClouds brings your technical notes and original diagrams into a calm, structured space. Sign up as a reader, find what you need, and keep building your own understanding.</p><button className="home-text-link" onClick={() => navigate('/signup')}>Get started with CyberClouds <span>→</span></button></div><div className="about-stats"><div><strong>05</strong><span>TOPIC AREAS</span></div><div><strong>01</strong><span>CONNECTED LIBRARY</span></div><div><strong>∞</strong><span>ROOM TO LEARN</span></div></div></section><footer className="home-footer"><a className="home-brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}><span className="brand-symbol cyber-logo-mark"><Cloud size={18} /><Shield size={9} /></span><span>cyberclouds</span></a><span>PRIVATE KNOWLEDGE / CONNECTED SYSTEMS</span><button onClick={() => navigate('/login')}>Sign in <span>↗</span></button></footer>
     
    
     </main>;
@@ -551,8 +686,27 @@ function App() {
 
   const currentSection = sections.find((section) => section.slug === activeSection) || sections[0];
   const currentDocuments = currentSection?.documents || [];
+  const currentModuleIndex = Math.max(0, sections.findIndex((section) => section.slug === activeSection));
+  const fullAccess = Boolean(user.hasFullAccess ?? (user.role === 'admin' || user.paymentDone || user.referralRewarded));
+  const filteredUsers = users.filter((account) => `${account.name} ${account.email} ${account.role} ${account.paymentDone ? 'paid' : 'pending'} ${account.referralRewarded ? 'referral free unlocked' : ''}`.toLowerCase().includes(adminUserSearch.trim().toLowerCase()));
   const selectedSection = adminSections.find((section) => section.slug === selectedAdminSection);
   const selectedSectionDocuments = adminDocuments.filter((document) => document.sectionSlug === selectedAdminSection);
+
+  function openModule(index) {
+    if (index < 0 || index >= sections.length) return;
+    if (!fullAccess && index > 0) {
+      setPaymentOpen(true);
+      return;
+    }
+    setActiveSection(sections[index].slug);
+    setActiveDocument(null);
+    setArticle(null);
+    setArticleError('');
+    setAdminOpen(false);
+    setProfileOpen(false);
+    setMobileOpen(false);
+    document.getElementById('library')?.scrollTo({ top: 0 });
+  }
 
   return <div className="library-app">
     <aside className={`library-sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
@@ -561,15 +715,15 @@ function App() {
       <nav className="source-navigation" aria-label="Knowledge sections">
         {sections.map((section, index) => {
           const Icon = sectionIcons[section.slug] || BookOpen;
-          const locked = user.role !== 'admin' && !user.paymentDone && index > 0;
-          return <button key={section.slug} disabled={locked} title={locked ? 'Complete payment for access to all modules' : undefined} className={`source-nav-item ${activeSection === section.slug && !adminOpen && !profileOpen ? 'current' : ''} ${locked ? 'module-locked' : ''}`} onClick={() => { setActiveSection(section.slug); setActiveDocument(null); setArticle(null); setAdminOpen(false); setProfileOpen(false); setMobileOpen(false); }}><Icon size={17} /><span>{section.name}</span><small>0{index + 1}</small></button>;
+          const locked = !fullAccess && index > 0;
+          return <button key={section.slug} disabled={locked} title={locked ? 'Pay for access or earn the course through referrals' : undefined} className={`source-nav-item ${activeSection === section.slug && !adminOpen && !profileOpen ? 'current' : ''} ${locked ? 'module-locked' : ''}`} onClick={() => { setActiveSection(section.slug); setActiveDocument(null); setArticle(null); setAdminOpen(false); setProfileOpen(false); setMobileOpen(false); }}><Icon size={17} /><span>{section.name}</span><small>0{index + 1}</small></button>;
         })}
       </nav>
-      {user.role !== 'admin' && !user.paymentDone && <button className="payment-access-note" onClick={() => setPaymentOpen(true)}>One module is available now. Click here to see how to pay and get access to all modules.</button>}
+      {!fullAccess && <button className="payment-access-note" onClick={() => setPaymentOpen(true)}>One module is open. Pay for full access or invite 10 learners for a free course.</button>}
       <div className="sidebar-account">
         <div className="role-pill"><span className={`role-dot ${user.role}`} />{user.role === 'admin' ? 'Administrator' : 'Reader'}{demo && <span className="demo-pill">DEMO</span>}</div>
         <div className="account-row"><div className="account-avatar">{user.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase()}</div><div className="account-copy"><strong>{user.name}</strong><span>{user.email}</span></div></div>
-        <button className={`admin-link profile-link ${profileOpen ? 'current' : ''}`} onClick={() => { setProfileOpen(true); setAdminOpen(false); setMobileOpen(false); setProfileError(''); setProfileNotice(''); setProfilePasswordError(''); setProfilePasswordNotice(''); }}><UserRound size={15} />My profile<span>→</span></button>
+        <button className={`admin-link profile-link ${profileOpen ? 'current' : ''}`} onClick={openProfile}><UserRound size={15} />My profile<span>→</span></button>
         {user.role === 'admin' && <button className={`admin-link ${adminOpen ? 'current' : ''}`} onClick={openAdmin}><Shield size={15} />Admin panel<span>→</span></button>}
         <button className="signout-button" onClick={signOut}><LogOut size={15} />Sign out</button>
       </div>
@@ -593,8 +747,8 @@ function App() {
             {adminPreview && !documentEditor && <section className="admin-content-preview"><div className="admin-content-preview-head"><div><span className="section-kicker">CONTENT PREVIEW</span><h3>{adminPreview.title}</h3></div><button type="button" className="icon-close" onClick={() => setAdminPreview(null)} aria-label="Close content preview"><X size={17} /></button></div>{adminPreview.kind === 'diagram' ? <div className="admin-diagram-preview"><img src={`${API_URL}/api/content/${adminPreview.id}`} alt={adminPreview.title} /></div> : <SourceReader article={{ text: adminPreview.content || '' }} />}</section>}
             {deleteTarget?.kind === 'document' && <div className="delete-confirm"><span>Delete <strong>{deleteTarget.item.title}</strong> permanently?</span><div><button className="danger-button" onClick={() => removeDocument(deleteTarget.item)}>Delete content</button><button className="quiet-button" onClick={() => setDeleteTarget(null)}>Cancel</button></div></div>}
           </> : <div className="manager-empty">Add a module to start your library.</div>}</div>
-        </div> : <div className="user-management"><div className="user-management-head"><p>Mark payment Done to unlock every module and email the user. Use Email to resend a confirmation.</p><button className="primary-small" onClick={() => setCreateUserOpen((open) => !open)}><Plus size={14} />Add user</button></div>{createUserOpen && <form className="user-editor create-user-editor" onSubmit={createUser}><div className="editor-heading"><div><div className="section-kicker">NEW ACCOUNT / READER</div><h3>Passwords are stored as secure hashes.</h3></div><button type="button" className="icon-close" onClick={() => setCreateUserOpen(false)} aria-label="Close new user form"><X size={17} /></button></div><div className="editor-field-row"><label>Name<input name="name" autoComplete="name" minLength="2" maxLength="100" required placeholder="Full name" /></label><label>Email<input name="email" type="email" autoComplete="email" required placeholder="name@example.com" /></label><label>Temporary password<input name="password" type="password" minLength="8" maxLength="128" required placeholder="Create a strong password" /></label></div><div className="editor-actions"><button type="button" className="quiet-button" onClick={() => setCreateUserOpen(false)}>Cancel</button><button className="primary-small"><Plus size={14} />Create reader</button></div></form>}<div className="user-table-wrap"><table className="user-table"><thead><tr><th>ACCOUNT</th><th>EMAIL</th><th>ROLE</th><th>ACCESS</th><th>PAYMENT</th><th>STATUS</th><th>MANAGE</th></tr></thead><tbody>{users.map((account) => <tr key={account.id}><td><strong>{account.name}</strong></td><td>{account.email}</td><td><span className={`table-role ${account.role}`}>{account.role}</span></td><td><select aria-label={`Role for ${account.email}`} value={account.role} disabled={String(account.id) === String(user.id)} onChange={(event) => changeRole(account, event.target.value)}><option value="user">Reader</option><option value="admin">Admin</option></select></td><td><button className={`account-status-toggle ${account.paymentDone ? 'enabled' : 'disabled'}`} disabled={account.role === 'admin'} onClick={() => changePayment(account, !account.paymentDone)}>{account.paymentDone ? 'Done' : 'Pending'}</button></td><td><button className={`account-status-toggle ${account.isActive ? 'enabled' : 'disabled'}`} disabled={String(account.id) === String(user.id)} onClick={() => changeActive(account, !account.isActive)}>{account.isActive ? 'Active' : 'Inactive'}</button></td><td><div className="user-actions"><button className="quiet-button" type="button" disabled={!account.paymentDone || account.role === 'admin'} aria-label={`Email payment confirmation to ${account.email}`} title="Send payment confirmation email" onClick={() => emailPaymentConfirmation(account)}><Mail size={13} />Email</button><button className="quiet-button" disabled={String(account.id) === String(user.id)} onClick={() => setEditingUser({ id: account.id, name: account.name, email: account.email })}>Edit</button><button className="icon-danger" disabled={String(account.id) === String(user.id)} aria-label={`Delete ${account.email}`} onClick={() => setDeleteTarget({ kind: 'user', item: account })}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div>{editingUser && <form className="user-editor" onSubmit={saveUser}><div className="editor-heading"><div><div className="section-kicker">EDIT ACCOUNT</div><h3>{editingUser.email}</h3></div><button type="button" className="icon-close" onClick={() => setEditingUser(null)} aria-label="Close account editor"><X size={17} /></button></div><div className="editor-field-row"><label>Name<input value={editingUser.name} required onChange={(event) => setEditingUser({ ...editingUser, name: event.target.value })} /></label><label>Email<input type="email" value={editingUser.email} required onChange={(event) => setEditingUser({ ...editingUser, email: event.target.value })} /></label></div><div className="editor-actions"><button type="button" className="quiet-button" onClick={() => setEditingUser(null)}>Cancel</button><button className="primary-small"><Save size={14} />Save account</button></div></form>}{deleteTarget?.kind === 'user' && <div className="delete-confirm"><span>Delete account <strong>{deleteTarget.item.email}</strong>?</span><div><button className="danger-button" onClick={() => removeUser(deleteTarget.item)}>Delete user</button><button className="quiet-button" onClick={() => setDeleteTarget(null)}>Cancel</button></div></div>}</div>}
-      </section> : profileOpen ? <section className="profile-view"><div className="page-kicker">ACCOUNT / PERSONAL SETTINGS</div><h1>My profile<span>.</span></h1><p className="page-intro">Manage your name and password, and check your account access.</p><div className="profile-panels"><form className="profile-panel" onSubmit={saveProfile}><div className="profile-panel-head"><span className="profile-panel-icon"><UserRound size={18} /></span><div><h2>Account details</h2><p>Your email is fixed. You can update your display name.</p></div></div><label>Name<input name="name" minLength="2" maxLength="100" required defaultValue={user.name} /></label><label>Email address<input type="email" value={user.email} readOnly aria-readonly="true" /></label>{profileError && <div className="form-alert" role="alert">{profileError}</div>}{profileNotice && <div className="success-alert" role="status">{profileNotice}</div>}<button className="primary-small"><Save size={14} />Save name</button></form><form className="profile-panel" onSubmit={savePassword}><div className="profile-panel-head"><span className="profile-panel-icon"><KeyRound size={18} /></span><div><h2>Change password</h2><p>Confirm your current password before setting a new one.</p></div></div><PasswordField label="Current password" name="currentPassword" autoComplete="current-password" /><PasswordField label="New password" name="newPassword" autoComplete="new-password" minLength={8} placeholder="Create a strong password" /><PasswordField label="Confirm new password" name="confirmPassword" autoComplete="new-password" minLength={8} /><p className="password-rule">8+ characters with uppercase, lowercase, a number, and a special character.</p>{profilePasswordError && <div className="form-alert" role="alert">{profilePasswordError}</div>}{profilePasswordNotice && <div className="success-alert" role="status">{profilePasswordNotice}</div>}<button className="primary-small"><Save size={14} />Update password</button></form><section className="profile-panel profile-access-panel"><div className="profile-panel-head"><span className="profile-panel-icon"><Shield size={18} /></span><div><h2>Payment &amp; module access</h2><p>Your current payment and library access status.</p></div></div><div className="profile-status-grid"><div className="profile-status-item"><span>Payment status</span><strong className={user.paymentDone || user.role === 'admin' ? 'status-paid' : 'status-pending'}>{user.role === 'admin' ? 'Admin account' : user.paymentDone ? 'Payment complete' : 'Payment pending'}</strong></div><div className="profile-status-item"><span>Module access</span><strong className={user.role === 'admin' || user.paymentDone ? 'status-paid' : 'status-pending'}>{user.role === 'admin' || user.paymentDone ? 'All modules unlocked' : 'One module available'}</strong></div><div className="profile-status-item"><span>Account status</span><strong className={user.isActive ? 'status-paid' : 'status-pending'}>{user.isActive ? 'Active' : 'Inactive'}</strong></div></div>{user.role !== 'admin' && !user.paymentDone && <button className="profile-payment-link" onClick={() => setPaymentOpen(true)}>View payment instructions</button>}</section></div></section> : <>
+        </div> : <div className="user-management"><div className="admin-referral-overview"><div className="admin-overview-heading"><div><span className="section-kicker">COMMUNITY / REFERRALS</span><h2>Growth and live activity</h2></div><span className="online-indicator"><i />{adminOverview.onlineUsers} online now</span></div><p className="admin-overview-note">Online means an active session seen within 2 minutes. Invite shares count in-app copy/share actions. Verification signs learners in automatically; sign-ins below count later login-page visits.</p><div className="admin-overview-cards"><div><strong>{adminOverview.totalUsers}</strong><span>learner accounts</span></div><div><strong>{adminOverview.referralShares}</strong><span>invite link shares</span></div><div><strong>{adminOverview.referralRegistrations}</strong><span>verified referrals</span></div><div><strong>{adminOverview.referralLogins}</strong><span>referred learners signed in again</span></div><div><strong>{adminOverview.referralPurchases}</strong><span>confirmed purchases</span></div></div>{adminReferralRows.length > 0 && <div className="admin-referral-table-wrap"><div className="admin-referral-title">REFERRAL ACTIVITY BY INVITER</div><table className="admin-referral-table"><thead><tr><th>INVITER</th><th>SHARES</th><th>REGISTERED</th><th>RETURN LOGINS</th><th>BOUGHT</th><th>REWARD</th></tr></thead><tbody>{adminReferralRows.map((row) => <tr key={row.id}><td><strong>{row.name}</strong><small>{row.email}</small></td><td>{row.shares}</td><td>{row.registrations} / 10</td><td>{row.logins}</td><td>{row.purchases}</td><td>{row.referralRewarded ? <span className="referral-reward-status">Unlocked</span> : 'In progress'}</td></tr>)}</tbody></table></div>}</div><div className="user-management-head"><p>Mark payment Done to unlock every module and email the user. Use Email to resend a confirmation.</p><button className="primary-small" onClick={() => setCreateUserOpen((open) => !open)}><Plus size={14} />Add user</button></div>{createUserOpen && <form className="user-editor create-user-editor" onSubmit={createUser}><div className="editor-heading"><div><div className="section-kicker">NEW ACCOUNT / READER</div><h3>Passwords are stored as secure hashes.</h3></div><button type="button" className="icon-close" onClick={() => setCreateUserOpen(false)} aria-label="Close new user form"><X size={17} /></button></div><div className="editor-field-row"><label>Name<input name="name" autoComplete="name" minLength="2" maxLength="100" required placeholder="Full name" /></label><label>Email<input name="email" type="email" autoComplete="email" required placeholder="name@example.com" /></label><label>Temporary password<input name="password" type="password" minLength="8" maxLength="128" required placeholder="Create a strong password" /></label></div><div className="editor-actions"><button type="button" className="quiet-button" onClick={() => setCreateUserOpen(false)}>Cancel</button><button className="primary-small"><Plus size={14} />Create reader</button></div></form>}<div className="user-search-row"><div><span className="section-kicker">USER DIRECTORY</span><strong>{filteredUsers.length ? `${filteredUsers.length} accounts` : 'No matching accounts'}</strong></div><label className="admin-user-search"><Search size={16} /><input type="search" value={adminUserSearch} onChange={(event) => setAdminUserSearch(event.target.value)} placeholder="Search name, email, role..." aria-label="Search users" /></label></div><div className="user-table-wrap"><table className="user-table"><thead><tr><th>ACCOUNT</th><th>EMAIL</th><th>ROLE</th><th>ACCESS</th><th>PAYMENT</th><th>STATUS</th><th>MANAGE</th></tr></thead><tbody>{filteredUsers.map((account) => <tr key={account.id}><td><strong>{account.name}</strong>{account.referralRewarded && <small className="user-referral-tag">FREE COURSE</small>}</td><td>{account.email}</td><td><span className={`table-role ${account.role}`}>{account.role}</span></td><td><select aria-label={`Role for ${account.email}`} value={account.role} disabled={String(account.id) === String(user.id)} onChange={(event) => changeRole(account, event.target.value)}><option value="user">Reader</option><option value="admin">Admin</option></select></td><td><button className={`account-status-toggle ${account.paymentDone ? 'enabled' : 'disabled'}`} disabled={account.role === 'admin'} onClick={() => changePayment(account, !account.paymentDone)}>{account.paymentDone ? 'Done' : 'Pending'}</button></td><td><button className={`account-status-toggle ${account.isActive ? 'enabled' : 'disabled'}`} disabled={String(account.id) === String(user.id)} onClick={() => changeActive(account, !account.isActive)}>{account.isActive ? 'Active' : 'Inactive'}</button></td><td><div className="user-actions"><button className="quiet-button" type="button" disabled={!account.paymentDone || account.role === 'admin'} aria-label={`Email payment confirmation to ${account.email}`} title="Send payment confirmation email" onClick={() => emailPaymentConfirmation(account)}><Mail size={13} />Email</button><button className="quiet-button" disabled={String(account.id) === String(user.id)} onClick={() => setEditingUser({ id: account.id, name: account.name, email: account.email })}>Edit</button><button className="icon-danger" disabled={String(account.id) === String(user.id)} aria-label={`Delete ${account.email}`} onClick={() => setDeleteTarget({ kind: 'user', item: account })}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div>{editingUser && <form className="user-editor" onSubmit={saveUser}><div className="editor-heading"><div><div className="section-kicker">EDIT ACCOUNT</div><h3>{editingUser.email}</h3></div><button type="button" className="icon-close" onClick={() => setEditingUser(null)} aria-label="Close account editor"><X size={17} /></button></div><div className="editor-field-row"><label>Name<input value={editingUser.name} required onChange={(event) => setEditingUser({ ...editingUser, name: event.target.value })} /></label><label>Email<input type="email" value={editingUser.email} required onChange={(event) => setEditingUser({ ...editingUser, email: event.target.value })} /></label></div><div className="editor-actions"><button type="button" className="quiet-button" onClick={() => setEditingUser(null)}>Cancel</button><button className="primary-small"><Save size={14} />Save account</button></div></form>}{deleteTarget?.kind === 'user' && <div className="delete-confirm"><span>Delete account <strong>{deleteTarget.item.email}</strong>?</span><div><button className="danger-button" onClick={() => removeUser(deleteTarget.item)}>Delete user</button><button className="quiet-button" onClick={() => setDeleteTarget(null)}>Cancel</button></div></div>}</div>}
+      </section> : profileOpen ? <section className="profile-view"><div className="page-kicker">ACCOUNT / PERSONAL SETTINGS</div><h1>My profile<span>.</span></h1><p className="page-intro">Manage your name and password, and check your account access.</p><div className="profile-panels"><form className="profile-panel" onSubmit={saveProfile}><div className="profile-panel-head"><span className="profile-panel-icon"><UserRound size={18} /></span><div><h2>Account details</h2><p>Your email is fixed. You can update your display name.</p></div></div><label>Name<input name="name" minLength="2" maxLength="100" required defaultValue={user.name} /></label><label>Email address<input type="email" value={user.email} readOnly aria-readonly="true" /></label>{profileError && <div className="form-alert" role="alert">{profileError}</div>}{profileNotice && <div className="success-alert" role="status">{profileNotice}</div>}<button className="primary-small"><Save size={14} />Save name</button></form><form className="profile-panel" onSubmit={savePassword}><div className="profile-panel-head"><span className="profile-panel-icon"><KeyRound size={18} /></span><div><h2>Change password</h2><p>Confirm your current password before setting a new one.</p></div></div><PasswordField label="Current password" name="currentPassword" autoComplete="current-password" /><PasswordField label="New password" name="newPassword" autoComplete="new-password" minLength={8} placeholder="Create a strong password" /><PasswordField label="Confirm new password" name="confirmPassword" autoComplete="new-password" minLength={8} /><p className="password-rule">8+ characters with uppercase, lowercase, a number, and a special character.</p>{profilePasswordError && <div className="form-alert" role="alert">{profilePasswordError}</div>}{profilePasswordNotice && <div className="success-alert" role="status">{profilePasswordNotice}</div>}<button className="primary-small"><Save size={14} />Update password</button></form><section className="profile-panel profile-access-panel"><div className="profile-panel-head"><span className="profile-panel-icon"><Shield size={18} /></span><div><h2>Payment &amp; module access</h2><p>Your current payment and library access status.</p></div></div><div className="profile-status-grid"><div className="profile-status-item"><span>Payment status</span><strong className={fullAccess ? 'status-paid' : 'status-pending'}>{user.role === 'admin' ? 'Admin account' : user.referralRewarded ? 'Free course unlocked' : user.paymentDone ? 'Payment complete' : 'Payment pending'}</strong></div><div className="profile-status-item"><span>Module access</span><strong className={fullAccess ? 'status-paid' : 'status-pending'}>{fullAccess ? 'All modules unlocked' : 'One module available'}</strong></div><div className="profile-status-item"><span>Account status</span><strong className={user.isActive ? 'status-paid' : 'status-pending'}>{user.isActive ? 'Active' : 'Inactive'}</strong></div></div>{user.role !== 'admin' && !fullAccess && <button className="profile-payment-link" onClick={() => setPaymentOpen(true)}>View payment instructions</button>}</section>{user.role === 'user' && <section className="profile-panel referral-panel"><div className="profile-panel-head"><span className="profile-panel-icon referral-icon"><Gift size={18} /></span><div><h2>Share the course, earn it free</h2><p>Invite 10 learners. When at least one of them has a confirmed purchase, your full library unlocks for free.</p></div></div><div className="referral-progress-summary"><div><strong>{referralStats?.shares || 0}</strong><span>invite link shares</span></div><div><strong>{referralStats?.registrations || 0}<small> / 10</small></strong><span>verified registrations</span></div><div><strong>{referralStats?.logins || 0}</strong><span>referred learners signed in again</span></div><div><strong>{referralStats?.purchases || 0}</strong><span>confirmed purchases</span></div></div><p className="referral-count-note">Shares count when you copy or share the invite link. Verification signs a learner in automatically; this count records later sign-ins. Purchases count after admin confirmation.</p><div className="referral-progress-track" aria-label={`${Math.min(referralStats?.registrations || 0, 10)} of 10 registrations`}><span style={{ width: `${Math.min((referralStats?.registrations || 0) * 10, 100)}%` }} /></div><div className="referral-code-row"><div><span>YOUR INVITE CODE</span><code>{referralStats?.code || user.referralCode || 'Loading...'}</code></div><button className="quiet-button" onClick={copyReferralLink}><Copy size={14} />Share invite link</button></div>{(referralStats?.rewardUnlocked || user.referralRewarded) && <div className="referral-unlocked"><Check size={15} />Your referral reward is active. All course modules are unlocked.</div>}{referralNotice && <div className="referral-feedback" role="status">{referralNotice}</div>}</section>}</div></section> : <>
         <section className="section-hero"><div><div className="page-kicker">SOURCE LIBRARY / 0{Math.max(1, sections.findIndex((item) => item.slug === activeSection) + 1)}</div><h1>{currentSection?.name}<span>.</span></h1><p className="page-intro">Original notes and source material, kept together by topic.</p></div><div className="hero-index">{String(currentDocuments.length).padStart(2, '0')}<small>SOURCE FILES</small></div></section>
         <section className="source-section">
           <div className="source-list-heading"><div><span className="section-kicker">ORIGINAL MATERIAL</span><h2>{activeDocument ? activeDocument.title : 'Documents in this section'}</h2></div>{activeDocument && <button className="back-to-sources" onClick={() => { setActiveDocument(null); setArticle(null); }}><ChevronLeft size={15} />All sources</button>}</div>
@@ -604,11 +758,13 @@ function App() {
             {articleError && <div className="form-alert" role="alert">{articleError}</div>}
             {activeDocument.kind === 'diagram' ? <div className="diagram-stage"><img src={`${API_URL}/api/content/${activeDocument.id}`} alt={activeDocument.title} /><p>Supplied editable Draw.io diagram. Download the original file above.</p></div> : article && <SourceReader article={article} />}
           </article>}
+          <div className="module-stepper"><button className="quiet-button" onClick={() => openModule(currentModuleIndex - 1)} disabled={currentModuleIndex === 0}>← Previous module</button><span>MODULE {String(currentModuleIndex + 1).padStart(2, '0')} / {String(sections.length).padStart(2, '0')}</span>{currentModuleIndex < sections.length - 1 ? <button className="primary-small" onClick={() => openModule(currentModuleIndex + 1)}>{fullAccess ? 'Next module' : 'Unlock next module'} →</button> : <button className="quiet-button" disabled>End of modules</button>}</div>
         </section>
         <footer className="library-footer"><span>CYBERCLOUDS / SOURCE MATERIAL</span><span>READ ONLY FOR MEMBER ACCOUNTS</span></footer>
       </>}
     </main>
-    {paymentOpen && <div className="payment-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPaymentOpen(false); }}><section className="payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-title"><button className="payment-modal-close" aria-label="Close payment details" onClick={() => setPaymentOpen(false)}><X size={18} /></button><span className="section-kicker">MODULE ACCESS / PAYMENT</span><h2 id="payment-title">How to get full access</h2><ol><li>Scan the QR code with GPay or another UPI app to make your payment.</li><li>Submit your payment details through the Google Form below.</li><li>The admin will review your payment. Verification may take time; you’ll receive an email at your registered address from <strong>{paymentSettings.contactEmail}</strong> when access is updated.</li></ol><div className="payment-email-warning" role="note"><strong>Important: use your CyberClouds account email</strong><p>Enter the same email address in the Google Form that you used to sign up or log in here. If the email does not match, we may not be able to identify your account, and access may be delayed or not granted even after payment. Payments may not be refundable, so please check the email carefully before submitting.</p></div><div className="payment-upi-details"><div className="payment-qr-frame"><img src={paymentSettings.qrImage} alt="GPay QR code for payment" /></div></div>{paymentSettings.googleFormUrl ? <a className="payment-form-link" href={paymentSettings.googleFormUrl} target="_blank" rel="noreferrer">Open payment Google Form <span>↗</span></a> : <p className="payment-form-pending">Payment Google Form link will be added here.</p>}<p className="payment-refund-note">Please review the payment details carefully before submitting the form. Contact the administrator if you need help.</p><button className="primary-small" onClick={() => setPaymentOpen(false)}>Got it</button></section></div>}
+    {logoutFeedbackOpen && <div className="logout-feedback-backdrop"><section className="logout-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="logout-feedback-title"><div className="logout-feedback-icon"><LogOut size={18} /></div><span className="section-kicker">BEFORE YOU GO</span><h2 id="logout-feedback-title">How was your experience this time?</h2><p>Your feedback helps us make the learning modules better.</p><form onSubmit={submitLogoutFeedback}><div className="logout-rating" role="radiogroup" aria-label="Rate your experience">{[1, 2, 3, 4, 5].map((rating) => <button type="button" key={rating} role="radio" aria-checked={logoutRating === rating} aria-label={`${rating} out of 5 stars`} className={logoutRating >= rating ? 'selected' : ''} onClick={() => setLogoutRating(rating)}><Star size={27} fill={logoutRating >= rating ? 'currentColor' : 'none'} /></button>)}</div><label className="logout-comment-label">Anything we should improve?<textarea value={logoutComment} maxLength={1000} onChange={(event) => setLogoutComment(event.target.value)} placeholder="Optional feedback" /></label>{logoutFeedbackError && <div className="form-alert" role="alert">{logoutFeedbackError}</div>}<button className="primary-small logout-submit" disabled={logoutFeedbackBusy}>{logoutFeedbackBusy ? 'Saving...' : 'Send feedback & sign out'}<span>→</span></button></form><div className="logout-feedback-actions"><button className="quiet-button" disabled={logoutFeedbackBusy} onClick={() => { setLogoutFeedbackOpen(false); }}>Keep learning</button><button className="quiet-button" disabled={logoutFeedbackBusy} onClick={finishSignOut}>Skip &amp; sign out</button></div></section></div>}
+    {paymentOpen && <div className="payment-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPaymentOpen(false); }}><section className="payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-title"><button className="payment-modal-close" aria-label="Close payment details" onClick={() => setPaymentOpen(false)}><X size={18} /></button><span className="section-kicker">MODULE ACCESS / PAYMENT</span><h2 id="payment-title">How to get full access</h2><div className="payment-email-warning referral-offer" role="note"><strong>Earn the full course free</strong><p>Refer 10 learners. When at least one of them has a confirmed purchase, all modules unlock on your account. Find your invite link in My profile.</p></div><ol><li>Scan the QR code with GPay or another UPI app to make your payment.</li><li>Submit your payment details through the Google Form below.</li><li>The admin will review your payment. Verification may take time; you’ll receive an email at your registered address from <strong>{paymentSettings.contactEmail}</strong> when access is updated.</li></ol><div className="payment-email-warning" role="note"><strong>Important: use your CyberClouds account email</strong><p>Enter the same email address in the Google Form that you used to sign up or log in here. If the email does not match, we may not be able to identify your account, and access may be delayed or not granted even after payment. Payments may not be refundable, so please check the email carefully before submitting.</p></div><div className="payment-upi-details"><div className="payment-qr-frame"><img src={paymentSettings.qrImage} alt="GPay QR code for payment" /></div></div>{paymentSettings.googleFormUrl ? <a className="payment-form-link" href={paymentSettings.googleFormUrl} target="_blank" rel="noreferrer">Open payment Google Form <span>↗</span></a> : <p className="payment-form-pending">Payment Google Form link will be added here.</p>}<p className="payment-refund-note">Please review the payment details carefully before submitting the form. Contact the administrator if you need help.</p><button className="primary-small" onClick={() => setPaymentOpen(false)}>Got it</button></section></div>}
   </div>;
 }
 

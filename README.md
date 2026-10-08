@@ -7,10 +7,12 @@ A PERN knowledge library for AWS, cybersecurity/OS, networking/hardware, Keycloa
 Requirements: Node.js 20+ and npm.
 
 1. Install dependencies with `npm install`, `npm install --prefix client`, and `npm install --prefix server`.
-2. Copy `.env.example` to `.env` and enter your own admin email/password and a random JWT secret. For persistent local data, set `DATABASE_URL` to a PostgreSQL connection URL; leave it blank only for an in-memory preview. Configure your real Brevo SMTP login, key, and verified sender if you want signup and payment emails locally.
+2. Copy `.env.example` to `.env` and enter your own admin email/password and a persistent random server secret. For persistent local data, set `DATABASE_URL` to a PostgreSQL connection URL; leave it blank only for an in-memory preview. Configure your real Brevo SMTP login, key, and verified sender if you want signup and payment emails locally.
 3. Run `npm run dev`; Vite prints the client URL and the API runs on port 3000.
 
-The server creates/updates the schema and imports the supplied library on startup. In-memory accounts disappear when the server restarts. Production startup requires PostgreSQL, a JWT secret, admin credentials, a public app URL, and complete SMTP settings.
+The server creates/updates the schema and imports the supplied library on startup. In-memory accounts disappear when the server restarts. Production startup requires PostgreSQL, the persistent `JWT_SECRET` value (used to protect email verification codes), admin credentials, a public app URL, and complete SMTP settings.
+
+Sign-in uses random, revocable server-side sessions stored as token hashes in PostgreSQL and sent in an HTTP-only cookie. Logout and password changes revoke sessions. Readers can also share referral codes: 10 verified registrations plus one verified course purchase unlocks the full library free. The reader asks for optional feedback during logout, and module reading stays in a viewport-sized scroll area with previous/next module controls.
 
 ## Deploy to Netlify and Render
 
@@ -28,7 +30,7 @@ Set these environment variables in the Render service. Use the existing real val
 
 - `NODE_ENV=production`
 - `DATABASE_URL`: your persistent PostgreSQL connection string
-- `JWT_SECRET`: a new random secret of at least 64 characters (generate one with `openssl rand -hex 64`)
+- `JWT_SECRET`: a persistent random server secret of at least 64 characters (generate one with `openssl rand -hex 64`)
 - `ADMIN_EMAIL` and `ADMIN_PASSWORD`: your real administrator credentials
 - `APP_URL`: the public Netlify site origin, such as `https://your-site.netlify.app`
 - `BREVO_SMTP_HOST`, `BREVO_SMTP_PORT`, `BREVO_SMTP_USER`, `BREVO_SMTP_PASS`, `MAIL_FROM`: your real Brevo SMTP settings and verified sender
@@ -43,7 +45,7 @@ The browser calls the Render API directly. Set `APP_URL` on Render to the public
 
 ## Secret cleanup
 
-The rejected GitHub push identified a Brevo SMTP key in `.env.example`. Keep `.env` private, use only placeholders in `.env.example`, and amend the local commit that contained the value before pushing again. The older pushed history also contains the JWT secret; it has been rotated in the local `.env`, so update Render's `JWT_SECRET` from that file before deploying. After deployment, change the existing administrator account password from the live Profile page, then update `ADMIN_PASSWORD` in `.env` and Render to match; changing that variable alone does not reset an already-created database account. If the Brevo key was ever accepted by any remote, revoke it in Brevo and set a new one in `.env` and Render.
+The rejected GitHub push identified a Brevo SMTP key in `.env.example`. Keep `.env` private, use only placeholders in `.env.example`, and amend the local commit that contained the value before pushing again. The older pushed history also contains the server secret; it has been rotated in the local `.env`, so update Render's `JWT_SECRET` from that file before deploying. The auth implementation now uses database-backed sessions, so users will need to sign in again after the first deployment of this change. After deployment, change the existing administrator account password from the live Profile page, then update `ADMIN_PASSWORD` in `.env` and Render to match; changing that variable alone does not reset an already-created database account. If the Brevo key was ever accepted by any remote, revoke it in Brevo and set a new one in `.env` and Render.
 
 ## Public routes
 

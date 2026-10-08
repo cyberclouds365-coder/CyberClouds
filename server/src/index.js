@@ -9,7 +9,6 @@ import dotenv from 'dotenv';
 import express from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
-import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
 import { ensureConfiguredAdministrator } from './adminAccount.js';
@@ -56,7 +55,7 @@ function validateDatabaseUrl(value) {
 }
 
 
-const jwtSecret = process.env.JWT_SECRET || randomBytes(48).toString('hex');
+const signupSecret = process.env.JWT_SECRET || randomBytes(48).toString('hex');
 const cookieName = 'fieldnotes_session';
 const cookieLifetime = 8 * 60 * 60 * 1000;
 const sessionCookieOptions = {
@@ -68,6 +67,9 @@ const sessionCookieOptions = {
 const contentRoot = join(serverDir, '../content');
 const memoryUsers = [];
 const memorySignupVerifications = new Map();
+const memorySessions = new Map();
+const memoryFeedback = [];
+const memoryReferralShares = [];
 let nextMemoryUserId = 1;
 let sesTransporter;
 const signupCodeLifetimeMs = 10 * 60 * 1000;
@@ -192,7 +194,17 @@ const spellingCorrections = [
 ];
 
 const findDocument = (id) => allDocuments.find((item) => item.id === id);
-const publicUser = ({ id, name, email, role, is_active = true, payment_done = false }) => ({ id, name, email, role, isActive: is_active, paymentDone: payment_done });
+const publicUser = ({ id, name, email, role, is_active = true, payment_done = false, referral_code = null, referral_rewarded = false }) => ({
+  id,
+  name,
+  email,
+  role,
+  isActive: is_active,
+  paymentDone: payment_done,
+  referralRewarded: referral_rewarded,
+  hasFullAccess: role === 'admin' || payment_done || referral_rewarded,
+  referralCode: referral_code,
+});
 const isStrongPassword = (password) => typeof password === 'string'
   && password.length >= 8
   && password.length <= 128
@@ -237,6 +249,13 @@ async function initializeContent() {
 }
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.disable('x-powered-by');
+app.use((request, response, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return next();
+  const origin = request.get('origin');
+  if (origin && !allowedClientOrigins.has(origin)) return response.status(403).json({ error: 'This request origin is not allowed' });
+  next();
+});
 
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
@@ -269,18 +288,178 @@ const signupVerificationLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 1
 
 async function findUserByEmail(email) {
   if (!pool) return memoryUsers.find((user) => user.email === email) || null;
-  const result = await pool.query('SELECT id, name, email, password_hash, role, is_active, payment_done FROM app_users WHERE email = $1', [email]);
+  const result = await pool.query('SELECT id, name, email, password_hash, role, is_active, payment_done, referral_code, referral_rewarded, referred_by_user_id FROM app_users WHERE email = $1', [email]);
   return result.rows[0] || null;
 }
 
 async function findUserById(id) {
   if (!pool) return memoryUsers.find((user) => String(user.id) === String(id)) || null;
-  const result = await pool.query('SELECT id, name, email, role, is_active, payment_done FROM app_users WHERE id = $1', [id]);
+  const result = await pool.query('SELECT id, name, email, role, is_active, payment_done, referral_code, referral_rewarded, referred_by_user_id FROM app_users WHERE id = $1', [id]);
   return result.rows[0] || null;
 }
 
-function issueSession(response, user) {
-  const token = jwt.sign({ sub: String(user.id) }, jwtSecret, { expiresIn: '8h' });
+async function createReferralCode() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = randomBytes(5).toString('hex').toUpperCase();
+    if (pool) {
+      const result = await pool.query('SELECT 1 FROM app_users WHERE referral_code = $1', [code]);
+      if (!result.rowCount) return code;
+    } else if (!memoryUsers.some((user) => user.referral_code === code)) {
+      return code;
+    }
+  }
+  throw new Error('Could not allocate a unique referral code');
+}
+
+async function findReferrerByCode(code) {
+  if (!pool) return memoryUsers.find((user) => user.referral_code === code && user.role === 'user' && user.is_active) || null;
+  const result = await pool.query('SELECT id FROM app_users WHERE referral_code = $1 AND role = \'user\' AND is_active = TRUE', [code]);
+  return result.rows[0] || null;
+}
+
+async function backfillReferralCodes() {
+  if (!pool) return;
+  const missing = await pool.query('SELECT id FROM app_users WHERE referral_code IS NULL');
+  for (const user of missing.rows) {
+    const code = await createReferralCode();
+    await pool.query('UPDATE app_users SET referral_code = $1 WHERE id = $2 AND referral_code IS NULL', [code, user.id]);
+  }
+}
+
+async function awardReferralCourseIfQualified(referrerId) {
+  if (!referrerId) return null;
+  if (pool) {
+    const result = await pool.query(`UPDATE app_users AS referrer
+      SET referral_rewarded = TRUE, referral_rewarded_at = NOW()
+      WHERE referrer.id = $1 AND referrer.role = 'user' AND referrer.referral_rewarded = FALSE
+        AND (SELECT COUNT(*) FROM app_users AS referred WHERE referred.referred_by_user_id = referrer.id AND referred.role = 'user') >= 10
+        AND EXISTS (SELECT 1 FROM app_users AS buyer WHERE buyer.referred_by_user_id = referrer.id AND buyer.payment_done = TRUE)
+      RETURNING referrer.id, referrer.name, referrer.email, referrer.referral_code, referrer.referral_rewarded`, [referrerId]);
+    return result.rows[0] || null;
+  }
+  const referrer = memoryUsers.find((user) => String(user.id) === String(referrerId));
+  if (!referrer || referrer.role !== 'user' || referrer.referral_rewarded) return null;
+  const referredUsers = memoryUsers.filter((user) => String(user.referred_by_user_id) === String(referrerId) && user.role === 'user');
+  if (referredUsers.length < 10 || !referredUsers.some((user) => user.payment_done)) return null;
+  referrer.referral_rewarded = true;
+  return referrer;
+}
+
+async function getReferralStats(userId) {
+  if (pool) {
+    const result = await pool.query(`SELECT COUNT(*)::int AS registrations,
+        COUNT(*) FILTER (WHERE login_count > 0)::int AS logins,
+        COUNT(*) FILTER (WHERE payment_done = TRUE)::int AS purchases
+      FROM app_users WHERE referred_by_user_id = $1 AND role = 'user'`, [userId]);
+    const shares = await pool.query('SELECT COUNT(*)::int AS shares FROM referral_share_events WHERE user_id = $1', [userId]);
+    const account = await findUserById(userId);
+    return {
+      code: account?.referral_code || null,
+      registrations: result.rows[0].registrations,
+      logins: result.rows[0].logins,
+      purchases: result.rows[0].purchases,
+      shares: shares.rows[0].shares,
+      rewardUnlocked: Boolean(account?.referral_rewarded),
+    };
+  }
+  const account = memoryUsers.find((user) => String(user.id) === String(userId));
+  const referredUsers = memoryUsers.filter((user) => String(user.referred_by_user_id) === String(userId) && user.role === 'user');
+  return {
+    code: account?.referral_code || null,
+    registrations: referredUsers.length,
+    logins: referredUsers.filter((user) => Number(user.login_count || 0) > 0).length,
+    purchases: referredUsers.filter((user) => user.payment_done).length,
+    shares: memoryReferralShares.filter((share) => String(share.userId) === String(userId)).length,
+    rewardUnlocked: Boolean(account?.referral_rewarded),
+  };
+}
+
+async function getAdminReferralSummary() {
+  if (pool) {
+    const [overviewResult, referralsResult] = await Promise.all([
+      pool.query(`SELECT
+        (SELECT COUNT(*)::int FROM app_users WHERE role = 'user') AS total_users,
+        (SELECT COUNT(DISTINCT s.user_id)::int FROM auth_sessions s JOIN app_users u ON u.id = s.user_id
+          WHERE s.expires_at > NOW() AND s.last_seen_at > NOW() - INTERVAL '2 minutes' AND u.is_active = TRUE AND u.role = 'user') AS online_users,
+        (SELECT COUNT(*)::int FROM referral_share_events) AS referral_shares,
+        (SELECT COUNT(*)::int FROM app_users WHERE referred_by_user_id IS NOT NULL AND role = 'user') AS referral_registrations,
+        (SELECT COUNT(*)::int FROM app_users WHERE referred_by_user_id IS NOT NULL AND role = 'user' AND login_count > 0) AS referral_logins,
+        (SELECT COUNT(*)::int FROM app_users WHERE referred_by_user_id IS NOT NULL AND role = 'user' AND payment_done = TRUE) AS referral_purchases`),
+      pool.query(`SELECT owner.id, owner.name, owner.email, owner.referral_rewarded,
+          COALESCE(shares.share_count, 0)::int AS shares,
+          COUNT(referred.id)::int AS registrations,
+          COUNT(referred.id) FILTER (WHERE referred.login_count > 0)::int AS logins,
+          COUNT(referred.id) FILTER (WHERE referred.payment_done = TRUE)::int AS purchases
+        FROM app_users owner
+        LEFT JOIN app_users referred ON referred.referred_by_user_id = owner.id AND referred.role = 'user'
+        LEFT JOIN (SELECT user_id, COUNT(*)::int AS share_count FROM referral_share_events GROUP BY user_id) shares ON shares.user_id = owner.id
+        WHERE owner.role = 'user'
+        GROUP BY owner.id, shares.share_count
+        HAVING COUNT(referred.id) > 0 OR COALESCE(shares.share_count, 0) > 0
+        ORDER BY registrations DESC, shares DESC, owner.created_at`),
+    ]);
+    const overview = overviewResult.rows[0];
+    return {
+      overview: {
+        totalUsers: overview.total_users,
+        onlineUsers: overview.online_users,
+        referralShares: overview.referral_shares,
+        referralRegistrations: overview.referral_registrations,
+        referralLogins: overview.referral_logins,
+        referralPurchases: overview.referral_purchases,
+      },
+      referrals: referralsResult.rows.map((row) => ({
+        id: row.id, name: row.name, email: row.email,
+        referralRewarded: Boolean(row.referral_rewarded), shares: row.shares,
+        registrations: row.registrations, logins: row.logins, purchases: row.purchases,
+      })),
+    };
+  }
+
+  const onlineUserIds = new Set([...memorySessions.values()]
+    .filter((session) => new Date(session.expiresAt).getTime() > Date.now() && Date.now() - new Date(session.lastSeenAt || 0).getTime() < 2 * 60 * 1000)
+    .filter((session) => memoryUsers.some((user) => String(user.id) === String(session.userId) && user.role === 'user' && user.is_active))
+    .map((session) => String(session.userId)));
+  const referred = memoryUsers.filter((user) => user.role === 'user' && user.referred_by_user_id);
+  const referrals = memoryUsers.filter((owner) => owner.role === 'user').map((owner) => {
+    const referredUsers = referred.filter((user) => String(user.referred_by_user_id) === String(owner.id));
+    const shares = memoryReferralShares.filter((event) => String(event.userId) === String(owner.id)).length;
+    return {
+      id: owner.id, name: owner.name, email: owner.email,
+      referralRewarded: Boolean(owner.referral_rewarded), shares,
+      registrations: referredUsers.length,
+      logins: referredUsers.filter((user) => Number(user.login_count || 0) > 0).length,
+      purchases: referredUsers.filter((user) => user.payment_done).length,
+    };
+  }).filter((row) => row.registrations > 0 || row.shares > 0)
+    .sort((a, b) => b.registrations - a.registrations || b.shares - a.shares);
+  return {
+    overview: {
+      totalUsers: memoryUsers.filter((user) => user.role === 'user').length,
+      onlineUsers: onlineUserIds.size,
+      referralShares: memoryReferralShares.length,
+      referralRegistrations: referred.length,
+      referralLogins: referred.filter((user) => Number(user.login_count || 0) > 0).length,
+      referralPurchases: referred.filter((user) => user.payment_done).length,
+    },
+    referrals,
+  };
+}
+
+function sessionTokenHash(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+async function issueSession(response, user) {
+  const token = randomBytes(32).toString('base64url');
+  const tokenHash = sessionTokenHash(token);
+  const expiresAt = new Date(Date.now() + cookieLifetime);
+  if (pool) {
+    await pool.query('DELETE FROM auth_sessions WHERE expires_at <= NOW()');
+    await pool.query('INSERT INTO auth_sessions (token_hash, user_id, expires_at, last_seen_at) VALUES ($1, $2, $3, NOW())', [tokenHash, user.id, expiresAt]);
+  } else {
+    memorySessions.set(tokenHash, { userId: user.id, expiresAt, lastSeenAt: new Date() });
+  }
   response.cookie(cookieName, token, { ...sessionCookieOptions, maxAge: cookieLifetime });
 }
 
@@ -288,14 +467,36 @@ async function requireAuth(request, response, next) {
   const token = request.cookies[cookieName];
   if (!token) return response.status(401).json({ error: 'Sign in is required' });
   try {
-    const payload = jwt.verify(token, jwtSecret);
-    const user = await findUserById(payload.sub);
-    if (!user || !user.is_active) return response.status(401).json({ error: 'This account is inactive or the session is no longer valid' });
+    const tokenHash = sessionTokenHash(token);
+    let session;
+    if (pool) {
+      const result = await pool.query('UPDATE auth_sessions SET last_seen_at = NOW() WHERE token_hash = $1 AND expires_at > NOW() RETURNING user_id', [tokenHash]);
+      session = result.rows[0];
+    } else {
+      session = memorySessions.get(tokenHash);
+      if (session && new Date(session.expiresAt).getTime() <= Date.now()) {
+        memorySessions.delete(tokenHash);
+        session = null;
+      }
+      if (session) session.lastSeenAt = new Date();
+    }
+    if (!session) {
+      response.clearCookie(cookieName, sessionCookieOptions);
+      return response.status(401).json({ error: 'Session is no longer valid' });
+    }
+    const user = await findUserById(session.user_id ?? session.userId);
+    if (!user || !user.is_active) {
+      if (pool) await pool.query('DELETE FROM auth_sessions WHERE token_hash = $1', [tokenHash]);
+      else memorySessions.delete(tokenHash);
+      response.clearCookie(cookieName, sessionCookieOptions);
+      return response.status(401).json({ error: 'This account is inactive or the session is no longer valid' });
+    }
     request.user = user;
-    next();
-  } catch {
+    return next();
+  } catch (error) {
+    if (error.code) return next(error);
     response.clearCookie(cookieName, sessionCookieOptions);
-    response.status(401).json({ error: 'Session is no longer valid' });
+    return response.status(401).json({ error: 'Session is no longer valid' });
   }
 }
 
@@ -404,7 +605,7 @@ async function sendBrandedEmail({ to, subject, text, html }) {
 }
 
 function signupCodeHash(email, code) {
-  return createHash('sha256').update(`${jwtSecret}:${email}:${code}`).digest('hex');
+  return createHash('sha256').update(`${signupSecret}:${email}:${code}`).digest('hex');
 }
 
 function hashesMatch(expected, supplied) {
@@ -413,27 +614,28 @@ function hashesMatch(expected, supplied) {
   return expectedBuffer.length === suppliedBuffer.length && expectedBuffer.length > 0 && timingSafeEqual(expectedBuffer, suppliedBuffer);
 }
 
-async function saveSignupVerification({ name, email, passwordHash, code }) {
+async function saveSignupVerification({ name, email, passwordHash, code, referredByUserId = null }) {
   const otpHash = signupCodeHash(email, code);
   const expiresAt = new Date(Date.now() + signupCodeLifetimeMs);
   if (pool) {
     await pool.query('DELETE FROM signup_verifications WHERE expires_at <= NOW()');
-    await pool.query(`INSERT INTO signup_verifications (email, name, password_hash, otp_hash, expires_at, attempts)
-      VALUES ($1, $2, $3, $4, $5, 0)
+    await pool.query(`INSERT INTO signup_verifications (email, name, password_hash, otp_hash, referred_by_user_id, expires_at, attempts)
+      VALUES ($1, $2, $3, $4, $5, $6, 0)
       ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, password_hash = EXCLUDED.password_hash,
-        otp_hash = EXCLUDED.otp_hash, expires_at = EXCLUDED.expires_at, attempts = 0`, [email, name, passwordHash, otpHash, expiresAt]);
+        otp_hash = EXCLUDED.otp_hash, referred_by_user_id = EXCLUDED.referred_by_user_id,
+        expires_at = EXCLUDED.expires_at, attempts = 0`, [email, name, passwordHash, otpHash, referredByUserId, expiresAt]);
   } else {
     for (const [pendingEmail, pending] of memorySignupVerifications) {
       if (new Date(pending.expires_at).getTime() <= Date.now()) memorySignupVerifications.delete(pendingEmail);
     }
-    memorySignupVerifications.set(email, { name, email, password_hash: passwordHash, otp_hash: otpHash, expires_at: expiresAt, attempts: 0 });
+    memorySignupVerifications.set(email, { name, email, password_hash: passwordHash, otp_hash: otpHash, referred_by_user_id: referredByUserId, expires_at: expiresAt, attempts: 0 });
   }
   return otpHash;
 }
 
-async function sendSignupVerification({ name, email, passwordHash }) {
+async function sendSignupVerification({ name, email, passwordHash, referredByUserId = null }) {
   const code = String(randomInt(100000, 1000000));
-  const otpHash = await saveSignupVerification({ name, email, passwordHash, code });
+  const otpHash = await saveSignupVerification({ name, email, passwordHash, code, referredByUserId });
   const expiryText = '10 minutes';
   const html = emailFrame({
     preheader: 'Your CyberClouds signup verification code.',
@@ -455,7 +657,7 @@ async function sendSignupVerification({ name, email, passwordHash }) {
 }
 
 async function sendPaymentConfirmation(user) {
-  const libraryUrl =  'https://cyberclouds.me'
+  const libraryUrl = process.env.APP_URL || 'http://localhost:5173';
   const html = emailFrame({
     preheader: 'Your payment has been confirmed and all CyberClouds modules are unlocked.',
     eyebrow: 'PAYMENT / ACCESS CONFIRMED',
@@ -486,6 +688,7 @@ app.get('/api/health', async (_request, response) => {
 
 app.post('/api/auth/signup', signupLimiter, async (request, response, next) => {
   const { name, email, password } = request.body;
+  const referralCode = typeof request.body.referralCode === 'string' ? request.body.referralCode.trim().toUpperCase() : '';
   if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) {
     return response.status(400).json({ error: 'Enter a name between 2 and 100 characters' });
   }
@@ -498,8 +701,15 @@ app.post('/api/auth/signup', signupLimiter, async (request, response, next) => {
   const normalizedEmail = email.trim().toLowerCase();
   try {
     if (await findUserByEmail(normalizedEmail)) return response.status(409).json({ error: 'An account with this email already exists' });
+    let referredByUserId = null;
+    if (referralCode) {
+      if (!/^[A-F0-9]{10}$/.test(referralCode)) return response.status(400).json({ error: 'Enter a valid referral code' });
+      const referrer = await findReferrerByCode(referralCode);
+      if (!referrer) return response.status(400).json({ error: 'That referral code is not valid' });
+      referredByUserId = referrer.id;
+    }
     const passwordHash = await bcrypt.hash(password, 12);
-    await sendSignupVerification({ name: name.trim(), email: normalizedEmail, passwordHash });
+    await sendSignupVerification({ name: name.trim(), email: normalizedEmail, passwordHash, referredByUserId });
     response.status(202).json({ verificationRequired: true, email: normalizedEmail });
   } catch (error) { next(error); }
 });
@@ -514,13 +724,13 @@ app.post('/api/auth/resend-signup-code', signupVerificationLimiter, async (reque
     if (await findUserByEmail(normalizedEmail)) return response.status(409).json({ error: 'An account with this email already exists' });
     let pending;
     if (pool) {
-      const result = await pool.query('SELECT name, password_hash FROM signup_verifications WHERE email = $1', [normalizedEmail]);
+      const result = await pool.query('SELECT name, password_hash, referred_by_user_id FROM signup_verifications WHERE email = $1', [normalizedEmail]);
       pending = result.rows[0];
     } else {
       pending = memorySignupVerifications.get(normalizedEmail);
     }
     if (!pending) return response.status(404).json({ error: 'No pending signup was found. Start again to request a verification code.' });
-    await sendSignupVerification({ name: pending.name, email: normalizedEmail, passwordHash: pending.password_hash });
+    await sendSignupVerification({ name: pending.name, email: normalizedEmail, passwordHash: pending.password_hash, referredByUserId: pending.referred_by_user_id });
     response.status(202).json({ verificationRequired: true, email: normalizedEmail });
   } catch (error) { next(error); }
 });
@@ -535,11 +745,12 @@ app.post('/api/auth/verify-signup', signupVerificationLimiter, async (request, r
   const suppliedHash = signupCodeHash(normalizedEmail, code.trim());
   try {
     let user;
+    const referralCode = await createReferralCode();
     if (pool) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const result = await client.query('SELECT name, password_hash, otp_hash, expires_at, attempts FROM signup_verifications WHERE email = $1 FOR UPDATE', [normalizedEmail]);
+        const result = await client.query('SELECT name, password_hash, otp_hash, referred_by_user_id, expires_at, attempts FROM signup_verifications WHERE email = $1 FOR UPDATE', [normalizedEmail]);
         const pending = result.rows[0];
         if (!pending) {
           await client.query('ROLLBACK');
@@ -567,8 +778,9 @@ app.post('/api/auth/verify-signup', signupVerificationLimiter, async (request, r
           await client.query('COMMIT');
           return response.status(409).json({ error: 'An account with this email already exists' });
         }
-        const created = await client.query(`INSERT INTO app_users (name, email, password_hash, role, is_active, payment_done)
-          VALUES ($1, $2, $3, 'user', TRUE, FALSE) RETURNING id, name, email, role, is_active, payment_done`, [pending.name, normalizedEmail, pending.password_hash]);
+        const created = await client.query(`INSERT INTO app_users (name, email, password_hash, role, is_active, payment_done, referral_code, referred_by_user_id)
+          VALUES ($1, $2, $3, 'user', TRUE, FALSE, $4, $5)
+          RETURNING id, name, email, role, is_active, payment_done, referral_code, referral_rewarded, referred_by_user_id`, [pending.name, normalizedEmail, pending.password_hash, referralCode, pending.referred_by_user_id]);
         await client.query('DELETE FROM signup_verifications WHERE email = $1', [normalizedEmail]);
         await client.query('COMMIT');
         user = created.rows[0];
@@ -594,11 +806,12 @@ app.post('/api/auth/verify-signup', signupVerificationLimiter, async (request, r
         memorySignupVerifications.delete(normalizedEmail);
         return response.status(409).json({ error: 'An account with this email already exists' });
       }
-      user = { id: nextMemoryUserId++, name: pending.name, email: normalizedEmail, password_hash: pending.password_hash, role: 'user', is_active: true, payment_done: false };
+      user = { id: nextMemoryUserId++, name: pending.name, email: normalizedEmail, password_hash: pending.password_hash, role: 'user', is_active: true, payment_done: false, referral_code: referralCode, referral_rewarded: false, referred_by_user_id: pending.referred_by_user_id };
       memoryUsers.push(user);
       memorySignupVerifications.delete(normalizedEmail);
     }
-    issueSession(response, user);
+    await awardReferralCourseIfQualified(user.referred_by_user_id);
+    await issueSession(response, user);
     response.status(201).json({ user: publicUser(user) });
   } catch (error) { next(error); }
 });
@@ -610,24 +823,62 @@ app.post('/api/auth/login', loginIpLimiter, loginLimiter, async (request, respon
     const user = await findUserByEmail(email.trim().toLowerCase());
     if (!user || !(await bcrypt.compare(password, user.password_hash))) return response.status(401).json({ error: 'Email or password is incorrect' });
     if (!user.is_active) return response.status(403).json({ error: 'This account is inactive. Contact an administrator.' });
-    issueSession(response, user);
+    if (pool) await pool.query('UPDATE app_users SET login_count = login_count + 1, last_login_at = NOW() WHERE id = $1', [user.id]);
+    else user.login_count = Number(user.login_count || 0) + 1;
+    await issueSession(response, user);
     response.json({ user: publicUser(user) });
   } catch (error) { next(error); }
 });
 
-app.post('/api/auth/logout', (_request, response) => {
+app.post('/api/auth/logout', async (request, response, next) => {
+  const token = request.cookies[cookieName];
+  if (token) {
+    const tokenHash = sessionTokenHash(token);
+    try {
+      if (pool) await pool.query('DELETE FROM auth_sessions WHERE token_hash = $1', [tokenHash]);
+      else memorySessions.delete(tokenHash);
+    } catch (error) { return next(error); }
+  }
   response.clearCookie(cookieName, sessionCookieOptions);
   response.status(204).end();
 });
 
 app.get('/api/auth/me', requireAuth, (request, response) => response.json({ user: publicUser(request.user), demo: !pool }));
 
+app.post('/api/auth/heartbeat', requireAuth, (_request, response) => response.status(204).end());
+
+app.post('/api/feedback', requireAuth, async (request, response, next) => {
+  const { rating, comment = '' } = request.body;
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) return response.status(400).json({ error: 'Choose a rating from 1 to 5' });
+  if (typeof comment !== 'string' || comment.length > 1000) return response.status(400).json({ error: 'Feedback must be shorter than 1000 characters' });
+  try {
+    if (pool) await pool.query('INSERT INTO experience_feedback (user_id, rating, comment) VALUES ($1, $2, $3)', [request.user.id, rating, comment.trim()]);
+    else memoryFeedback.push({ userId: request.user.id, rating, comment: comment.trim(), createdAt: new Date().toISOString() });
+    response.status(201).json({ saved: true });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/referrals/me', requireAuth, async (request, response, next) => {
+  try { response.json({ referral: await getReferralStats(request.user.id) }); }
+  catch (error) { next(error); }
+});
+
+app.post('/api/referrals/share', requireAuth, async (request, response, next) => {
+  if (request.user.role !== 'user') return response.status(403).json({ error: 'Referral links are available to learner accounts' });
+  try {
+    if (pool) await pool.query('INSERT INTO referral_share_events (user_id) VALUES ($1)', [request.user.id]);
+    else memoryReferralShares.push({ userId: request.user.id, createdAt: new Date().toISOString() });
+    const referral = await getReferralStats(request.user.id);
+    response.status(201).json({ shares: referral.shares });
+  } catch (error) { next(error); }
+});
+
 app.patch('/api/profile', requireAuth, async (request, response, next) => {
   const { name } = request.body;
   if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) return response.status(400).json({ error: 'Name must be between 2 and 100 characters' });
   try {
     if (pool) {
-      const result = await pool.query('UPDATE app_users SET name = $1 WHERE id = $2 RETURNING id, name, email, role, is_active, payment_done', [name.trim(), request.user.id]);
+      const result = await pool.query('UPDATE app_users SET name = $1 WHERE id = $2 RETURNING id, name, email, role, is_active, payment_done, referral_code, referral_rewarded', [name.trim(), request.user.id]);
       return response.json({ user: publicUser(result.rows[0]) });
     }
     request.user.name = name.trim();
@@ -644,8 +895,12 @@ app.patch('/api/profile/password', requireAuth, async (request, response, next) 
     if (!(await bcrypt.compare(currentPassword, user.password_hash))) return response.status(403).json({ error: 'Current password is incorrect' });
     if (await bcrypt.compare(newPassword, user.password_hash)) return response.status(400).json({ error: 'New password must be different from your current password' });
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    if (pool) await pool.query('UPDATE app_users SET password_hash = $1 WHERE id = $2', [passwordHash, request.user.id]);
+    if (pool) {
+      await pool.query('UPDATE app_users SET password_hash = $1 WHERE id = $2', [passwordHash, request.user.id]);
+      await pool.query('DELETE FROM auth_sessions WHERE user_id = $1', [request.user.id]);
+    }
     else request.user.password_hash = passwordHash;
+    await issueSession(response, request.user);
     response.json({ ok: true });
   } catch (error) { next(error); }
 });
@@ -679,7 +934,7 @@ async function getDocument(id) {
 }
 
 async function canAccessDocument(user, document) {
-  if (user.role === 'admin' || user.payment_done) return true;
+  if (user.role === 'admin' || user.payment_done || user.referral_rewarded) return true;
   const sections = await listSections();
   return sections[0]?.slug === document.sectionSlug;
 }
@@ -908,10 +1163,16 @@ app.get('/api/content/:id/source', requireAuth, async (request, response, next) 
 });
 app.get('/api/admin/users', requireAuth, requireAdmin, async (_request, response, next) => {
   try {
-    const result = pool
-      ? await pool.query('SELECT id, name, email, role, is_active, payment_done, created_at FROM app_users ORDER BY created_at, id')
-      : { rows: memoryUsers.map(({ password_hash: _hash, ...user }) => user) };
-    response.json({ users: result.rows.map((row) => ({ ...publicUser(row), createdAt: row.created_at || row.createdAt })) });
+    const [result, referralSummary] = await Promise.all([
+      pool
+        ? pool.query('SELECT id, name, email, role, is_active, payment_done, referral_rewarded, created_at FROM app_users ORDER BY created_at, id')
+        : Promise.resolve({ rows: memoryUsers.map(({ password_hash: _hash, ...user }) => user) }),
+      getAdminReferralSummary(),
+    ]);
+    response.json({
+      users: result.rows.map((row) => ({ ...publicUser(row), createdAt: row.created_at || row.createdAt })),
+      ...referralSummary,
+    });
   } catch (error) { next(error); }
 });
 
@@ -920,8 +1181,9 @@ app.patch('/api/admin/users/:id/payment', requireAuth, requireAdmin, async (requ
   if (typeof paymentDone !== 'boolean') return response.status(400).json({ error: 'paymentDone must be true or false' });
   try {
     let account;
+    let referralRewardGrantedTo = null;
     if (pool) {
-      const result = await pool.query('UPDATE app_users SET payment_done = $1 WHERE id = $2 RETURNING id, name, email, role, is_active, payment_done', [paymentDone, request.params.id]);
+      const result = await pool.query('UPDATE app_users SET payment_done = $1 WHERE id = $2 RETURNING id, name, email, role, is_active, payment_done, referral_rewarded, referral_code, referred_by_user_id', [paymentDone, request.params.id]);
       if (!result.rowCount) return response.status(404).json({ error: 'User not found' });
       account = result.rows[0];
     } else {
@@ -929,15 +1191,20 @@ app.patch('/api/admin/users/:id/payment', requireAuth, requireAdmin, async (requ
       if (!account) return response.status(404).json({ error: 'User not found' });
       account.payment_done = paymentDone;
     }
-    if (!paymentDone) return response.json({ user: publicUser(account), emailSent: false });
+    if (paymentDone) {
+      const referralReward = await awardReferralCourseIfQualified(account.referred_by_user_id);
+      if (referralReward) referralRewardGrantedTo = { id: referralReward.id, name: referralReward.name, email: referralReward.email };
+    }
+    if (!paymentDone) return response.json({ user: publicUser(account), emailSent: false, referralRewardGrantedTo });
     try {
       await sendPaymentConfirmation(account);
-      response.json({ user: publicUser(account), emailSent: true });
+      response.json({ user: publicUser(account), emailSent: true, referralRewardGrantedTo });
     } catch (emailError) {
       console.error(`Payment confirmation email failed for ${account.email}:`, emailError.message);
       response.json({
         user: publicUser(account),
         emailSent: false,
+        referralRewardGrantedTo,
       message: 'Payment was marked complete, but the email could not be sent. Check the Brevo SMTP settings and click the payment button again to retry.',
       });
     }
@@ -1046,13 +1313,15 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (request, response
   try {
     if (await findUserByEmail(normalizedEmail)) return response.status(409).json({ error: 'An account with this email already exists' });
     const passwordHash = await bcrypt.hash(password, 12);
+    const referralCode = await createReferralCode();
     let account;
     if (pool) {
-      const result = await pool.query(`INSERT INTO app_users (name, email, password_hash, role, is_active, payment_done)
-        VALUES ($1, $2, $3, 'user', FALSE, FALSE) RETURNING id, name, email, role, is_active, payment_done, created_at`, [name.trim(), normalizedEmail, passwordHash]);
+      const result = await pool.query(`INSERT INTO app_users (name, email, password_hash, role, is_active, payment_done, referral_code)
+        VALUES ($1, $2, $3, 'user', FALSE, FALSE, $4)
+        RETURNING id, name, email, role, is_active, payment_done, referral_code, referral_rewarded, created_at`, [name.trim(), normalizedEmail, passwordHash, referralCode]);
       account = result.rows[0];
     } else {
-      account = { id: nextMemoryUserId++, name: name.trim(), email: normalizedEmail, password_hash: passwordHash, role: 'user', is_active: false, payment_done: false, created_at: new Date().toISOString() };
+      account = { id: nextMemoryUserId++, name: name.trim(), email: normalizedEmail, password_hash: passwordHash, role: 'user', is_active: false, payment_done: false, referral_code: referralCode, referral_rewarded: false, created_at: new Date().toISOString() };
       memoryUsers.push(account);
     }
     response.status(201).json({ user: publicUser(account) });
@@ -1092,12 +1361,13 @@ async function start() {
     }
     await initializeContent();
     const adminResult = await ensureConfiguredAdministrator({ pool, email: adminEmail, password: adminPassword });
+    await backfillReferralCodes();
     if (adminResult === 'updated') console.log(`Updated administrator account email: ${adminEmail}`);
     if (adminResult === 'created') console.log(`Created initial administrator account: ${adminEmail}`);
   } else {
     await initializeContent();
     const passwordHash = await bcrypt.hash(adminPassword, 12);
-    memoryUsers.push({ id: nextMemoryUserId++, name: 'Site Administrator', email: adminEmail, password_hash: passwordHash, role: 'admin', is_active: true });
+    memoryUsers.push({ id: nextMemoryUserId++, name: 'Site Administrator', email: adminEmail, password_hash: passwordHash, role: 'admin', is_active: true, payment_done: false, referral_code: await createReferralCode(), referral_rewarded: false });
     console.warn('PostgreSQL is not configured. Accounts use temporary in-memory storage for local preview.');
   }
 

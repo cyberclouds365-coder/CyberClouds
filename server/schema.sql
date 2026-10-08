@@ -14,21 +14,61 @@ CREATE TABLE IF NOT EXISTS app_users (
   role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   payment_done BOOLEAN NOT NULL DEFAULT FALSE,
+  referral_code TEXT,
+  referred_by_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
+  referral_rewarded BOOLEAN NOT NULL DEFAULT FALSE,
+  referral_rewarded_at TIMESTAMPTZ,
+  login_count INTEGER NOT NULL DEFAULT 0,
+  last_login_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS payment_done BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS referral_code TEXT;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS referred_by_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS referral_rewarded BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS referral_rewarded_at TIMESTAMPTZ;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS login_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS app_users_referral_code_idx ON app_users(referral_code) WHERE referral_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS app_users_referred_by_idx ON app_users(referred_by_user_id);
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+CREATE INDEX IF NOT EXISTS auth_sessions_user_id_idx ON auth_sessions(user_id);
+CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx ON auth_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS auth_sessions_last_seen_idx ON auth_sessions(last_seen_at);
+
+CREATE TABLE IF NOT EXISTS referral_share_events (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS referral_share_events_user_id_idx ON referral_share_events(user_id);
 
 CREATE TABLE IF NOT EXISTS signup_verifications (
   email TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   otp_hash TEXT NOT NULL,
+  referred_by_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE signup_verifications ADD COLUMN IF NOT EXISTS referred_by_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS signup_verifications_expiry_idx ON signup_verifications(expires_at);
 
@@ -65,3 +105,13 @@ CREATE TABLE IF NOT EXISTS notes (
 
 CREATE INDEX IF NOT EXISTS notes_category_id_idx ON notes(category_id);
 CREATE INDEX IF NOT EXISTS notes_updated_at_idx ON notes(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS experience_feedback (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
+  rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comment TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS experience_feedback_created_at_idx ON experience_feedback(created_at DESC);
