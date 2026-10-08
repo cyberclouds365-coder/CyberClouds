@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS app_users (
   referral_rewarded_at TIMESTAMPTZ,
   login_count INTEGER NOT NULL DEFAULT 0,
   last_login_at TIMESTAMPTZ,
+  terms_accepted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -31,6 +32,7 @@ ALTER TABLE app_users ADD COLUMN IF NOT EXISTS referral_rewarded BOOLEAN NOT NUL
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS referral_rewarded_at TIMESTAMPTZ;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS login_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
 
 CREATE UNIQUE INDEX IF NOT EXISTS app_users_referral_code_idx ON app_users(referral_code) WHERE referral_code IS NOT NULL;
 CREATE INDEX IF NOT EXISTS app_users_referred_by_idx ON app_users(referred_by_user_id);
@@ -71,6 +73,19 @@ CREATE TABLE IF NOT EXISTS signup_verifications (
 ALTER TABLE signup_verifications ADD COLUMN IF NOT EXISTS referred_by_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS signup_verifications_expiry_idx ON signup_verifications(expires_at);
+
+ALTER TABLE signup_verifications ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS password_reset_verifications (
+  email TEXT PRIMARY KEY,
+  otp_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  last_sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS password_reset_verifications_expiry_idx ON password_reset_verifications(expires_at);
 
 CREATE INDEX IF NOT EXISTS app_users_role_idx ON app_users(role);
 

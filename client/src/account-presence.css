@@ -1,0 +1,10 @@
+.account-name-presence{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.user-presence{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:#8797a9;font-size:9px;font-weight:700}
+.user-presence i{width:7px;height:7px;flex:none;border-radius:50%;background:#a7b4c1}
+.user-presence.online{color:#347653}
+.user-presence.online i{background:#43b477;box-shadow:0 0 0 3px #e2f5ea}
+.user-presence.offline i{background:#a9b6c3}
+.referral-copy-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.referral-code-row code{user-select:all;cursor:text}
+.referral-feedback{overflow-wrap:anywhere}
+@media(max-width:700px){.referral-copy-actions{width:100%;justify-content:flex-start}.referral-copy-actions .quiet-button{min-height:32px}}

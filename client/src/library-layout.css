@@ -433,78 +433,11 @@
   letter-spacing: -.5px;
 }
 
-.logout-feedback-modal > p {
-  margin: 0;
-  color: #74869b;
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.logout-rating {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin: 20px 0;
-}
-
-.logout-rating button {
-  width: 41px;
-  height: 41px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #dce6f0;
-  border-radius: 50%;
-  background: #fff;
-  color: #b5c2cf;
-  cursor: pointer;
-}
-
-.logout-rating button.selected {
-  border-color: #f0d38b;
-  background: #fff9e9;
-  color: #d59b2d;
-}
-
-.logout-comment-label {
-  display: grid;
-  gap: 7px;
-  color: #526b85;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.logout-comment-label textarea {
-  min-height: 82px;
-  resize: vertical;
-  border: 1px solid #dce5ef;
-  border-radius: 4px;
-  padding: 9px 10px;
-  outline: none;
-  color: #294665;
-  font: 11px/1.6 'Manrope', sans-serif;
-}
-
-.logout-comment-label textarea:focus {
-  border-color: #75a9d0;
-  box-shadow: 0 0 0 2px #2868c512;
-}
-
-.logout-submit {
-  width: 100%;
-  justify-content: space-between;
-  margin-top: 14px;
-  height: 39px;
-}
-
-.logout-submit span {
-  font-size: 15px;
-}
-
 .logout-feedback-actions {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 20px;
 }
 
 .logout-feedback-actions button {

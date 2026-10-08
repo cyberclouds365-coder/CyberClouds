@@ -19,7 +19,7 @@ const serverDir = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(serverDir, '../../.env') });
 
 const app = express();
-app.set('trust proxy',1) ;
+app.set('trust proxy', 1);
 
 
 const allowedClientOrigins = new Set(['http://localhost:5173', 'http://127.0.0.1:5173']);
@@ -56,7 +56,7 @@ function validateDatabaseUrl(value) {
 
 
 const signupSecret = process.env.JWT_SECRET || randomBytes(48).toString('hex');
-const cookieName = 'fieldnotes_session';
+const cookieName = process.env.NODE_ENV === 'production' ? '__Host-fieldnotes_session' : 'fieldnotes_session';
 const cookieLifetime = 8 * 60 * 60 * 1000;
 const sessionCookieOptions = {
   httpOnly: true,
@@ -70,10 +70,13 @@ const memorySignupVerifications = new Map();
 const memorySessions = new Map();
 const memoryFeedback = [];
 const memoryReferralShares = [];
+const memoryPasswordResets = new Map();
 let nextMemoryUserId = 1;
 let sesTransporter;
 const signupCodeLifetimeMs = 10 * 60 * 1000;
 const maxSignupCodeAttempts = 5;
+const passwordResetCodeLifetimeMs = 10 * 60 * 1000;
+const onlinePresenceWindowMs = 5 * 60 * 1000;
 
 const categories = [
   { slug: 'os', name: 'Operating Systems', icon: 'monitor' },
@@ -248,11 +251,18 @@ async function initializeContent() {
   }
 }
 
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  strictTransportSecurity: process.env.NODE_ENV === 'production'
+    ? { maxAge: 31536000, includeSubDomains: false, preload: false }
+    : false,
+}));
 app.disable('x-powered-by');
 app.use((request, response, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return next();
   const origin = request.get('origin');
+  if (process.env.NODE_ENV === 'production' && !origin) return response.status(403).json({ error: 'A valid request origin is required' });
   if (origin && !allowedClientOrigins.has(origin)) return response.status(403).json({ error: 'This request origin is not allowed' });
   next();
 });
@@ -285,6 +295,20 @@ const loginLimiter = rateLimit({
 });
 const signupLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false });
 const signupVerificationLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
+const passwordResetRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (_request, response) => response.status(429).json({ error: 'Too many reset requests. Wait a while and try again.' }),
+});
+const passwordResetVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (_request, response) => response.status(429).json({ error: 'Too many verification attempts. Wait a while and try again.' }),
+});
 
 async function findUserByEmail(email) {
   if (!pool) return memoryUsers.find((user) => user.email === email) || null;
@@ -326,6 +350,21 @@ async function backfillReferralCodes() {
   }
 }
 
+async function ensureReferralCode(userId) {
+  if (pool) {
+    const account = await findUserById(userId);
+    if (!account) return null;
+    if (account.referral_code) return account.referral_code;
+    const code = await createReferralCode();
+    const updated = await pool.query('UPDATE app_users SET referral_code = $1 WHERE id = $2 AND referral_code IS NULL RETURNING referral_code', [code, userId]);
+    return updated.rows[0]?.referral_code || (await findUserById(userId))?.referral_code || null;
+  }
+  const account = memoryUsers.find((user) => String(user.id) === String(userId));
+  if (!account) return null;
+  if (!account.referral_code) account.referral_code = await createReferralCode();
+  return account.referral_code;
+}
+
 async function awardReferralCourseIfQualified(referrerId) {
   if (!referrerId) return null;
   if (pool) {
@@ -346,26 +385,35 @@ async function awardReferralCourseIfQualified(referrerId) {
 }
 
 async function getReferralStats(userId) {
+  const code = await ensureReferralCode(userId);
   if (pool) {
-    const result = await pool.query(`SELECT COUNT(*)::int AS registrations,
-        COUNT(*) FILTER (WHERE login_count > 0)::int AS logins,
-        COUNT(*) FILTER (WHERE payment_done = TRUE)::int AS purchases
-      FROM app_users WHERE referred_by_user_id = $1 AND role = 'user'`, [userId]);
-    const shares = await pool.query('SELECT COUNT(*)::int AS shares FROM referral_share_events WHERE user_id = $1', [userId]);
-    const account = await findUserById(userId);
+    const result = await pool.query(`SELECT account.referral_code, account.referral_rewarded,
+        stats.registrations, stats.logins, stats.purchases, shares.shares
+      FROM app_users account
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS registrations,
+          COUNT(*) FILTER (WHERE login_count > 0)::int AS logins,
+          COUNT(*) FILTER (WHERE payment_done = TRUE)::int AS purchases
+        FROM app_users WHERE referred_by_user_id = account.id AND role = 'user'
+      ) stats ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS shares FROM referral_share_events WHERE user_id = account.id
+      ) shares ON TRUE
+      WHERE account.id = $1`, [userId]);
+    const account = result.rows[0];
     return {
-      code: account?.referral_code || null,
-      registrations: result.rows[0].registrations,
-      logins: result.rows[0].logins,
-      purchases: result.rows[0].purchases,
-      shares: shares.rows[0].shares,
+      code: code || account?.referral_code || null,
+      registrations: account?.registrations || 0,
+      logins: account?.logins || 0,
+      purchases: account?.purchases || 0,
+      shares: account?.shares || 0,
       rewardUnlocked: Boolean(account?.referral_rewarded),
     };
   }
   const account = memoryUsers.find((user) => String(user.id) === String(userId));
   const referredUsers = memoryUsers.filter((user) => String(user.referred_by_user_id) === String(userId) && user.role === 'user');
   return {
-    code: account?.referral_code || null,
+    code: code || account?.referral_code || null,
     registrations: referredUsers.length,
     logins: referredUsers.filter((user) => Number(user.login_count || 0) > 0).length,
     purchases: referredUsers.filter((user) => user.payment_done).length,
@@ -379,8 +427,8 @@ async function getAdminReferralSummary() {
     const [overviewResult, referralsResult] = await Promise.all([
       pool.query(`SELECT
         (SELECT COUNT(*)::int FROM app_users WHERE role = 'user') AS total_users,
-        (SELECT COUNT(DISTINCT s.user_id)::int FROM auth_sessions s JOIN app_users u ON u.id = s.user_id
-          WHERE s.expires_at > NOW() AND s.last_seen_at > NOW() - INTERVAL '2 minutes' AND u.is_active = TRUE AND u.role = 'user') AS online_users,
+        (SELECT COUNT(DISTINCT active_session.user_id)::int FROM auth_sessions active_session JOIN app_users u ON u.id = active_session.user_id
+          WHERE active_session.expires_at > NOW() AND active_session.last_seen_at > NOW() - INTERVAL '5 minutes' AND u.is_active = TRUE) AS online_users,
         (SELECT COUNT(*)::int FROM referral_share_events) AS referral_shares,
         (SELECT COUNT(*)::int FROM app_users WHERE referred_by_user_id IS NOT NULL AND role = 'user') AS referral_registrations,
         (SELECT COUNT(*)::int FROM app_users WHERE referred_by_user_id IS NOT NULL AND role = 'user' AND login_count > 0) AS referral_logins,
@@ -417,8 +465,8 @@ async function getAdminReferralSummary() {
   }
 
   const onlineUserIds = new Set([...memorySessions.values()]
-    .filter((session) => new Date(session.expiresAt).getTime() > Date.now() && Date.now() - new Date(session.lastSeenAt || 0).getTime() < 2 * 60 * 1000)
-    .filter((session) => memoryUsers.some((user) => String(user.id) === String(session.userId) && user.role === 'user' && user.is_active))
+    .filter((session) => new Date(session.expiresAt).getTime() > Date.now() && Date.now() - new Date(session.lastSeenAt || 0).getTime() < onlinePresenceWindowMs)
+    .filter((session) => memoryUsers.some((user) => String(user.id) === String(session.userId) && user.is_active))
     .map((session) => String(session.userId)));
   const referred = memoryUsers.filter((user) => user.role === 'user' && user.referred_by_user_id);
   const referrals = memoryUsers.filter((owner) => owner.role === 'user').map((owner) => {
@@ -608,34 +656,40 @@ function signupCodeHash(email, code) {
   return createHash('sha256').update(`${signupSecret}:${email}:${code}`).digest('hex');
 }
 
+function passwordResetCodeHash(email, code) {
+  return createHash('sha256').update(`${signupSecret}:password-reset:${email}:${code}`).digest('hex');
+}
+
 function hashesMatch(expected, supplied) {
   const expectedBuffer = Buffer.from(expected || '', 'hex');
   const suppliedBuffer = Buffer.from(supplied || '', 'hex');
   return expectedBuffer.length === suppliedBuffer.length && expectedBuffer.length > 0 && timingSafeEqual(expectedBuffer, suppliedBuffer);
 }
 
-async function saveSignupVerification({ name, email, passwordHash, code, referredByUserId = null }) {
+async function saveSignupVerification({ name, email, passwordHash, code, referredByUserId = null, termsAcceptedAt = null }) {
   const otpHash = signupCodeHash(email, code);
   const expiresAt = new Date(Date.now() + signupCodeLifetimeMs);
   if (pool) {
     await pool.query('DELETE FROM signup_verifications WHERE expires_at <= NOW()');
-    await pool.query(`INSERT INTO signup_verifications (email, name, password_hash, otp_hash, referred_by_user_id, expires_at, attempts)
-      VALUES ($1, $2, $3, $4, $5, $6, 0)
+    await pool.query(`INSERT INTO signup_verifications (email, name, password_hash, otp_hash, referred_by_user_id, expires_at, attempts, terms_accepted_at)
+      VALUES ($1, $2, $3, $4, $5, $6, 0, $7)
       ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, password_hash = EXCLUDED.password_hash,
         otp_hash = EXCLUDED.otp_hash, referred_by_user_id = EXCLUDED.referred_by_user_id,
-        expires_at = EXCLUDED.expires_at, attempts = 0`, [email, name, passwordHash, otpHash, referredByUserId, expiresAt]);
+        expires_at = EXCLUDED.expires_at, attempts = 0,
+        terms_accepted_at = COALESCE(EXCLUDED.terms_accepted_at, signup_verifications.terms_accepted_at)`, [email, name, passwordHash, otpHash, referredByUserId, expiresAt, termsAcceptedAt]);
   } else {
     for (const [pendingEmail, pending] of memorySignupVerifications) {
       if (new Date(pending.expires_at).getTime() <= Date.now()) memorySignupVerifications.delete(pendingEmail);
     }
-    memorySignupVerifications.set(email, { name, email, password_hash: passwordHash, otp_hash: otpHash, referred_by_user_id: referredByUserId, expires_at: expiresAt, attempts: 0 });
+    const previous = memorySignupVerifications.get(email);
+    memorySignupVerifications.set(email, { name, email, password_hash: passwordHash, otp_hash: otpHash, referred_by_user_id: referredByUserId, terms_accepted_at: termsAcceptedAt || previous?.terms_accepted_at || null, expires_at: expiresAt, attempts: 0 });
   }
   return otpHash;
 }
 
-async function sendSignupVerification({ name, email, passwordHash, referredByUserId = null }) {
+async function sendSignupVerification({ name, email, passwordHash, referredByUserId = null, termsAcceptedAt = null }) {
   const code = String(randomInt(100000, 1000000));
-  const otpHash = await saveSignupVerification({ name, email, passwordHash, code, referredByUserId });
+  const otpHash = await saveSignupVerification({ name, email, passwordHash, code, referredByUserId, termsAcceptedAt });
   const expiryText = '10 minutes';
   const html = emailFrame({
     preheader: 'Your CyberClouds signup verification code.',
@@ -653,6 +707,51 @@ async function sendSignupVerification({ name, email, passwordHash, referredByUse
     if (pool) await pool.query('DELETE FROM signup_verifications WHERE email = $1 AND otp_hash = $2', [email, otpHash]).catch(() => {});
     else if (memorySignupVerifications.get(email)?.otp_hash === otpHash) memorySignupVerifications.delete(email);
     throw error;
+  }
+}
+
+async function storePasswordResetCode(email, code) {
+  const otpHash = passwordResetCodeHash(email, code);
+  const expiresAt = new Date(Date.now() + passwordResetCodeLifetimeMs);
+  if (pool) {
+    await pool.query('DELETE FROM password_reset_verifications WHERE expires_at <= NOW()');
+    const result = await pool.query(`INSERT INTO password_reset_verifications (email, otp_hash, expires_at, attempts, last_sent_at)
+      VALUES ($1, $2, $3, 0, NOW())
+      ON CONFLICT (email) DO UPDATE SET otp_hash = EXCLUDED.otp_hash, expires_at = EXCLUDED.expires_at,
+        attempts = 0, last_sent_at = NOW()
+      WHERE password_reset_verifications.last_sent_at <= NOW() - INTERVAL '1 minute'
+      RETURNING email`, [email, otpHash, expiresAt]);
+    return result.rowCount ? otpHash : null;
+  }
+  const current = memoryPasswordResets.get(email);
+  if (current && Date.now() - new Date(current.last_sent_at).getTime() < 60 * 1000) return null;
+  memoryPasswordResets.set(email, { otp_hash: otpHash, expires_at: expiresAt, attempts: 0, last_sent_at: new Date() });
+  return otpHash;
+}
+
+async function sendPasswordResetCode(email, code, otpHash) {
+  const expiryText = '10 minutes';
+  const html = emailFrame({
+    preheader: 'Your CyberClouds password reset verification code.',
+    eyebrow: 'ACCOUNT SECURITY / PASSWORD RESET',
+    title: 'Reset your password',
+    recipientName: 'there',
+    content: `<p style="margin:0 0 18px;color:#536a84;font-size:14px;line-height:1.7">Enter this one-time code on CyberClouds to choose a new password.</p>
+      <div style="display:inline-block;margin:0 0 19px;padding:13px 20px;border:1px solid #d8e6f2;border-radius:7px;background:#f5f9fd;color:#1551a2;font-size:30px;font-weight:700;letter-spacing:8px">${code}</div>
+      <p style="margin:0;color:#788ba1;font-size:12px;line-height:1.7">This code expires in ${expiryText} and can only be used once. If you did not request a reset, ignore this email.</p>`,
+    footer: 'For your security, never share this verification code with anyone.',
+  });
+  try {
+    await sendBrandedEmail({
+      to: email,
+      subject: `${code} is your CyberClouds password reset code`,
+      text: `Your CyberClouds password reset code is ${code}. It expires in ${expiryText} and can only be used once. If you did not request a reset, ignore this email.`,
+      html,
+    });
+  } catch (error) {
+    if (pool) await pool.query('DELETE FROM password_reset_verifications WHERE email = $1 AND otp_hash = $2', [email, otpHash]).catch(() => {});
+    else if (memoryPasswordResets.get(email)?.otp_hash === otpHash) memoryPasswordResets.delete(email);
+    console.error('Password reset email could not be sent:', error.message);
   }
 }
 
@@ -688,6 +787,7 @@ app.get('/api/health', async (_request, response) => {
 
 app.post('/api/auth/signup', signupLimiter, async (request, response, next) => {
   const { name, email, password } = request.body;
+  if (request.body.termsAccepted !== true && request.body.termsAccepted !== 'true') return response.status(400).json({ error: 'Please agree to the Terms and Conditions and Privacy Policy' });
   const referralCode = typeof request.body.referralCode === 'string' ? request.body.referralCode.trim().toUpperCase() : '';
   if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) {
     return response.status(400).json({ error: 'Enter a name between 2 and 100 characters' });
@@ -709,7 +809,7 @@ app.post('/api/auth/signup', signupLimiter, async (request, response, next) => {
       referredByUserId = referrer.id;
     }
     const passwordHash = await bcrypt.hash(password, 12);
-    await sendSignupVerification({ name: name.trim(), email: normalizedEmail, passwordHash, referredByUserId });
+    await sendSignupVerification({ name: name.trim(), email: normalizedEmail, passwordHash, referredByUserId, termsAcceptedAt: new Date() });
     response.status(202).json({ verificationRequired: true, email: normalizedEmail });
   } catch (error) { next(error); }
 });
@@ -724,13 +824,13 @@ app.post('/api/auth/resend-signup-code', signupVerificationLimiter, async (reque
     if (await findUserByEmail(normalizedEmail)) return response.status(409).json({ error: 'An account with this email already exists' });
     let pending;
     if (pool) {
-      const result = await pool.query('SELECT name, password_hash, referred_by_user_id FROM signup_verifications WHERE email = $1', [normalizedEmail]);
+      const result = await pool.query('SELECT name, password_hash, referred_by_user_id, terms_accepted_at FROM signup_verifications WHERE email = $1', [normalizedEmail]);
       pending = result.rows[0];
     } else {
       pending = memorySignupVerifications.get(normalizedEmail);
     }
     if (!pending) return response.status(404).json({ error: 'No pending signup was found. Start again to request a verification code.' });
-    await sendSignupVerification({ name: pending.name, email: normalizedEmail, passwordHash: pending.password_hash, referredByUserId: pending.referred_by_user_id });
+    await sendSignupVerification({ name: pending.name, email: normalizedEmail, passwordHash: pending.password_hash, referredByUserId: pending.referred_by_user_id, termsAcceptedAt: pending.terms_accepted_at || null });
     response.status(202).json({ verificationRequired: true, email: normalizedEmail });
   } catch (error) { next(error); }
 });
@@ -750,7 +850,7 @@ app.post('/api/auth/verify-signup', signupVerificationLimiter, async (request, r
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const result = await client.query('SELECT name, password_hash, otp_hash, referred_by_user_id, expires_at, attempts FROM signup_verifications WHERE email = $1 FOR UPDATE', [normalizedEmail]);
+        const result = await client.query('SELECT name, password_hash, otp_hash, referred_by_user_id, terms_accepted_at, expires_at, attempts FROM signup_verifications WHERE email = $1 FOR UPDATE', [normalizedEmail]);
         const pending = result.rows[0];
         if (!pending) {
           await client.query('ROLLBACK');
@@ -778,9 +878,9 @@ app.post('/api/auth/verify-signup', signupVerificationLimiter, async (request, r
           await client.query('COMMIT');
           return response.status(409).json({ error: 'An account with this email already exists' });
         }
-        const created = await client.query(`INSERT INTO app_users (name, email, password_hash, role, is_active, payment_done, referral_code, referred_by_user_id)
-          VALUES ($1, $2, $3, 'user', TRUE, FALSE, $4, $5)
-          RETURNING id, name, email, role, is_active, payment_done, referral_code, referral_rewarded, referred_by_user_id`, [pending.name, normalizedEmail, pending.password_hash, referralCode, pending.referred_by_user_id]);
+        const created = await client.query(`INSERT INTO app_users (name, email, password_hash, role, is_active, payment_done, referral_code, referred_by_user_id, terms_accepted_at)
+          VALUES ($1, $2, $3, 'user', TRUE, FALSE, $4, $5, $6)
+          RETURNING id, name, email, role, is_active, payment_done, referral_code, referral_rewarded, referred_by_user_id`, [pending.name, normalizedEmail, pending.password_hash, referralCode, pending.referred_by_user_id, pending.terms_accepted_at || new Date()]);
         await client.query('DELETE FROM signup_verifications WHERE email = $1', [normalizedEmail]);
         await client.query('COMMIT');
         user = created.rows[0];
@@ -806,7 +906,7 @@ app.post('/api/auth/verify-signup', signupVerificationLimiter, async (request, r
         memorySignupVerifications.delete(normalizedEmail);
         return response.status(409).json({ error: 'An account with this email already exists' });
       }
-      user = { id: nextMemoryUserId++, name: pending.name, email: normalizedEmail, password_hash: pending.password_hash, role: 'user', is_active: true, payment_done: false, referral_code: referralCode, referral_rewarded: false, referred_by_user_id: pending.referred_by_user_id };
+      user = { id: nextMemoryUserId++, name: pending.name, email: normalizedEmail, password_hash: pending.password_hash, role: 'user', is_active: true, payment_done: false, referral_code: referralCode, referral_rewarded: false, referred_by_user_id: pending.referred_by_user_id, terms_accepted_at: pending.terms_accepted_at || new Date() };
       memoryUsers.push(user);
       memorySignupVerifications.delete(normalizedEmail);
     }
@@ -827,6 +927,108 @@ app.post('/api/auth/login', loginIpLimiter, loginLimiter, async (request, respon
     else user.login_count = Number(user.login_count || 0) + 1;
     await issueSession(response, user);
     response.json({ user: publicUser(user) });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/auth/forgot-password', passwordResetRequestLimiter, async (request, response, next) => {
+  const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    return response.status(400).json({ error: 'Enter a valid email address' });
+  }
+  const requestStartedAt = Date.now();
+  try {
+    const account = await findUserByEmail(email);
+    if (account?.is_active) {
+      const code = String(randomInt(100000, 1000000));
+      const otpHash = await storePasswordResetCode(email, code);
+      if (otpHash) void sendPasswordResetCode(email, code, otpHash);
+    }
+    const remainingDelay = 300 - (Date.now() - requestStartedAt);
+    if (remainingDelay > 0) await new Promise((resolve) => setTimeout(resolve, remainingDelay));
+    response.status(202).json({ message: 'If an active account uses that email, a verification code is on its way.' });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/auth/reset-password', passwordResetVerifyLimiter, async (request, response, next) => {
+  const { code, newPassword } = request.body || {};
+  const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return response.status(400).json({ error: 'Enter a valid email address' });
+  if (typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) return response.status(400).json({ error: 'Enter the 6-digit email code' });
+  if (!isStrongPassword(newPassword)) return response.status(400).json({ error: 'Use at least 8 characters with uppercase, lowercase, a number, and a special character' });
+  const suppliedHash = passwordResetCodeHash(email, code.trim());
+  try {
+    if (pool) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await client.query('SELECT otp_hash, expires_at, attempts FROM password_reset_verifications WHERE email = $1 FOR UPDATE', [email]);
+        const reset = result.rows[0];
+        if (!reset) {
+          await client.query('ROLLBACK');
+          return response.status(400).json({ error: 'The code is invalid or expired. Request a new one.' });
+        }
+        if (new Date(reset.expires_at).getTime() <= Date.now()) {
+          await client.query('DELETE FROM password_reset_verifications WHERE email = $1', [email]);
+          await client.query('COMMIT');
+          return response.status(400).json({ error: 'The code is invalid or expired. Request a new one.' });
+        }
+        if (reset.attempts >= maxSignupCodeAttempts) {
+          await client.query('COMMIT');
+          return response.status(400).json({ error: 'The code is invalid or expired. Request a new one.' });
+        }
+        if (!hashesMatch(reset.otp_hash, suppliedHash)) {
+          await client.query('UPDATE password_reset_verifications SET attempts = attempts + 1 WHERE email = $1', [email]);
+          await client.query('COMMIT');
+          return response.status(400).json({ error: 'The code is invalid or expired. Request a new one.' });
+        }
+        const accountResult = await client.query('SELECT id, password_hash, is_active FROM app_users WHERE email = $1 FOR UPDATE', [email]);
+        const account = accountResult.rows[0];
+        if (!account?.is_active) {
+          await client.query('DELETE FROM password_reset_verifications WHERE email = $1', [email]);
+          await client.query('COMMIT');
+          return response.status(400).json({ error: 'The code is invalid or expired. Request a new one.' });
+        }
+        if (await bcrypt.compare(newPassword, account.password_hash)) {
+          await client.query('COMMIT');
+          return response.status(400).json({ error: 'Choose a password different from your current password' });
+        }
+        const passwordHash = await bcrypt.hash(newPassword, 12);
+        await client.query('UPDATE app_users SET password_hash = $1 WHERE id = $2', [passwordHash, account.id]);
+        await client.query('DELETE FROM password_reset_verifications WHERE email = $1', [email]);
+        await client.query('DELETE FROM auth_sessions WHERE user_id = $1', [account.id]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    } else {
+      const reset = memoryPasswordResets.get(email);
+      if (!reset) return response.status(400).json({ error: 'The code is invalid or expired. Request a new one.' });
+      if (new Date(reset.expires_at).getTime() <= Date.now()) {
+        memoryPasswordResets.delete(email);
+        return response.status(400).json({ error: 'The code is invalid or expired. Request a new one.' });
+      }
+      if (reset.attempts >= maxSignupCodeAttempts) return response.status(400).json({ error: 'The code is invalid or expired. Request a new one.' });
+      if (!hashesMatch(reset.otp_hash, suppliedHash)) {
+        reset.attempts += 1;
+        return response.status(400).json({ error: 'The code is invalid or expired. Request a new one.' });
+      }
+      const account = memoryUsers.find((user) => user.email === email && user.is_active);
+      if (!account) {
+        memoryPasswordResets.delete(email);
+        return response.status(400).json({ error: 'The code is invalid or expired. Request a new one.' });
+      }
+      if (await bcrypt.compare(newPassword, account.password_hash)) return response.status(400).json({ error: 'Choose a password different from your current password' });
+      account.password_hash = await bcrypt.hash(newPassword, 12);
+      memoryPasswordResets.delete(email);
+      for (const [tokenHash, session] of memorySessions) {
+        if (String(session.userId) === String(account.id)) memorySessions.delete(tokenHash);
+      }
+    }
+    response.clearCookie(cookieName, sessionCookieOptions);
+    response.json({ ok: true, message: 'Password updated. Sign in with your new password.' });
   } catch (error) { next(error); }
 });
 
@@ -1163,14 +1365,23 @@ app.get('/api/content/:id/source', requireAuth, async (request, response, next) 
 });
 app.get('/api/admin/users', requireAuth, requireAdmin, async (_request, response, next) => {
   try {
+    const now = Date.now();
+    const memoryOnlineIds = new Set([...memorySessions.values()]
+      .filter((session) => new Date(session.expiresAt).getTime() > now && now - new Date(session.lastSeenAt || 0).getTime() < onlinePresenceWindowMs)
+      .map((session) => String(session.userId)));
     const [result, referralSummary] = await Promise.all([
       pool
-        ? pool.query('SELECT id, name, email, role, is_active, payment_done, referral_rewarded, created_at FROM app_users ORDER BY created_at, id')
-        : Promise.resolve({ rows: memoryUsers.map(({ password_hash: _hash, ...user }) => user) }),
+        ? pool.query(`SELECT account.id, account.name, account.email, account.role, account.is_active, account.payment_done,
+            account.referral_rewarded, account.created_at,
+            EXISTS (SELECT 1 FROM auth_sessions active_session
+              WHERE active_session.user_id = account.id AND active_session.expires_at > NOW()
+                AND active_session.last_seen_at > NOW() - INTERVAL '5 minutes') AS is_online
+          FROM app_users account ORDER BY account.created_at, account.id`)
+        : Promise.resolve({ rows: memoryUsers.map(({ password_hash: _hash, ...user }) => ({ ...user, is_online: Boolean(user.is_active && memoryOnlineIds.has(String(user.id))) })) }),
       getAdminReferralSummary(),
     ]);
     response.json({
-      users: result.rows.map((row) => ({ ...publicUser(row), createdAt: row.created_at || row.createdAt })),
+      users: result.rows.map((row) => ({ ...publicUser(row), isOnline: Boolean(row.is_active && row.is_online), createdAt: row.created_at || row.createdAt })),
       ...referralSummary,
     });
   } catch (error) { next(error); }

@@ -10,9 +10,9 @@ Requirements: Node.js 20+ and npm.
 2. Copy `.env.example` to `.env` and enter your own admin email/password and a persistent random server secret. For persistent local data, set `DATABASE_URL` to a PostgreSQL connection URL; leave it blank only for an in-memory preview. Configure your real Brevo SMTP login, key, and verified sender if you want signup and payment emails locally.
 3. Run `npm run dev`; Vite prints the client URL and the API runs on port 3000.
 
-The server creates/updates the schema and imports the supplied library on startup. In-memory accounts disappear when the server restarts. Production startup requires PostgreSQL, the persistent `JWT_SECRET` value (used to protect email verification codes), admin credentials, a public app URL, and complete SMTP settings.
+The server creates/updates the schema and imports the supplied library on startup. In-memory accounts disappear when the server restarts. Production startup requires PostgreSQL, the persistent `JWT_SECRET` value (used to protect signup and password-reset verification codes), admin credentials, a public app URL, and complete SMTP settings.
 
-Sign-in uses random, revocable server-side sessions stored as token hashes in PostgreSQL and sent in an HTTP-only cookie. Logout and password changes revoke sessions. Readers can also share referral codes: 10 verified registrations plus one verified course purchase unlocks the full library free. The reader asks for optional feedback during logout, and module reading stays in a viewport-sized scroll area with previous/next module controls.
+Sign-in uses random, revocable server-side sessions stored as token hashes in PostgreSQL and sent in an HTTP-only cookie. Production cookies are Secure and host-only; the API only accepts write requests from the configured app origin. Sessions expire after eight hours, and logout or password changes revoke them. Forgot-password checks for an active account, sends a single-use Brevo code valid for ten minutes, rate-limits attempts, and revokes all sessions after a successful reset. Its response does not disclose whether an email belongs to an account. Readers can share referral codes: 10 verified registrations plus one confirmed course purchase unlock the full library free. Signup records acceptance of the Terms and Conditions and Privacy Policy.
 
 ## Deploy to Netlify and Render
 
@@ -52,13 +52,20 @@ The rejected GitHub push identified a Brevo SMTP key in `.env.example`. Keep `.e
 - `/` CyberClouds public home
 - `/login` sign in
 - `/signup` reader registration
+- `/forgot-password` email-code password reset
+- `/terms` Terms and Conditions
+- `/privacy` Privacy Policy
 
 ## API
 
 Authentication/profile:
 
 - `POST /api/auth/signup`
+- `POST /api/auth/verify-signup`
+- `POST /api/auth/resend-signup-code`
 - `POST /api/auth/login`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 - `PATCH /api/profile`

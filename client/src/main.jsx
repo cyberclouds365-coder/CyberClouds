@@ -13,6 +13,8 @@ import './cyberclouds-polish.css';
 import './payment.css';
 import './content-view.css';
 import './library-layout.css';
+import './legal-pages.css';
+import './account-presence.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
