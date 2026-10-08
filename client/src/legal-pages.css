@@ -3,7 +3,7 @@
 .legal-brand{display:flex;align-items:center;gap:9px;padding:0;border:0;background:transparent;color:#183354;font-size:16px;font-weight:800;cursor:pointer}
 .legal-brand .brand-symbol{width:34px;height:34px;border-radius:8px}
 .legal-header nav,.legal-footer nav{display:flex;align-items:center;gap:8px}
-.legal-header nav button,.legal-footer nav button{padding:8px 11px;border:0;border-radius:3px;background:transparent;color:#6c8098;font-size:11px;cursor:pointer}
+.legal-header nav button,.legal-footer nav button{padding:9px 12px;border:0;border-radius:3px;background:transparent;color:#6c8098;font-size:12px;font-weight:700;cursor:pointer}
 .legal-header nav button.active,.legal-header nav button:hover,.legal-footer nav button:hover{background:#edf4fc;color:#1551a2}
 .legal-return{height:36px;padding:0 12px;border:1px solid #d8e4f0;border-radius:4px;background:#fff;color:#315679;font-size:10px;font-weight:700;cursor:pointer}
 .legal-return span{margin-left:8px;color:#32a5bd}
@@ -42,9 +42,10 @@
 .library-legal-links button{padding:0;border:0;background:transparent;color:#7188a3;font:8px var(--mono);cursor:pointer}
 .library-legal-links button:hover{color:#1551a2;text-decoration:underline}
 @media(max-width:700px){
-  .legal-header{height:65px;padding:0 16px}
-  .legal-header nav{gap:0}
-  .legal-header nav button{padding:8px;font-size:10px}
+  .legal-header{height:auto;min-height:65px;display:grid;grid-template-columns:minmax(0,1fr) auto;padding:10px 16px;gap:5px 8px}
+  .legal-header nav{grid-column:1 / -1;grid-row:2;justify-content:center;gap:8px}
+  .legal-header nav button{padding:8px 10px;font-size:11px}
+  .legal-return{grid-column:2;grid-row:1}
   .legal-return{height:32px;padding:0 8px;font-size:9px}
   .legal-hero{padding:52px 21px 34px}
   .legal-hero h1{font-size:39px;letter-spacing:-1.4px}

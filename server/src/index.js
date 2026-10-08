@@ -1589,18 +1589,19 @@ app.get('/api/health', async (_request, response) => {
   const server = app.listen(port, '0.0.0.0', () => console.log(`Fieldnotes API listening on http://0.0.0.0:${port}`));
   server.on('error', async (error) => {
     if (error.code === 'EADDRINUSE') {
-      // The dev server is often already running in another terminal. Reuse it
-      // when it answers as this API; never kill an unknown process on the port.
+      // Reuse only an API instance that already has the current referral route.
+      // An older dev process may answer /api/auth/me while still returning 404
+      // for newer routes, which leaves the browser pointed at stale code.
       try {
-        const response = await fetch(`http://127.0.0.1:${port}/api/auth/me`, { signal: AbortSignal.timeout(1500) });
+        const response = await fetch(`http://127.0.0.1:${port}/api/referrals/me`, { signal: AbortSignal.timeout(1500) });
         if (response.status === 401) {
-          console.info(`Fieldnotes API is already running on port ${port}; keeping the existing server.`);
+          console.info(`Current Fieldnotes API is already running on port ${port}; keeping the existing server.`);
           return;
         }
       } catch {
         // Report the original bind error below with the configured port.
       }
-      console.error(`Port ${port} is already in use by another process. Stop that process or start the API with a different PORT.`);
+      console.error(`Port ${port} is in use by an older or unrelated process. Stop that process, then restart the API, or start this API with a different PORT.`);
       process.exitCode = 1;
       return;
     }

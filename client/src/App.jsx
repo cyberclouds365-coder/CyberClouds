@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Check, ChevronLeft, Cloud, Copy, Eye, EyeOff, Gift, KeyRound, Link2, LogOut, Mail, Menu, Monitor, Network, Plus, Save, Search, Shield, Terminal, Trash2, UserRound, X } from 'lucide-react';
+import { BookOpen, Check, ChevronLeft, Cloud, Copy, Eye, EyeOff, Gift, KeyRound, Link2, LogOut, Mail, Menu, Monitor, Network, Plus, Save, Search, Shield, Star, Terminal, Trash2, UserRound, X } from 'lucide-react';
 import { createSourceOutline, parseSourceText } from './sourceFormatting.js';
 import { paymentSettings } from './paymentConfig.js';
 import GoogleAd from './GoogleAd.jsx';
@@ -8,6 +8,7 @@ import GoogleAd from './GoogleAd.jsx';
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 const sectionIcons = { os: Monitor, networking: Network, keycloak: KeyRound, commands: Terminal, aws: Cloud };
+const legalContactEmail = 'cyberclouds365@gmail.com';
 
 function PasswordField({ label, name, autoComplete, minLength, maxLength = 128, required = true, placeholder }) {
   const [visible, setVisible] = useState(false);
@@ -63,12 +64,12 @@ function LegalPage({ kind, onNavigate, signedIn }) {
   return <main className="legal-page">
     <header className="legal-header">
       <button className="legal-brand" onClick={() => onNavigate('/')}><span className="brand-symbol cyber-logo-mark"><Cloud size={19} /><Shield size={10} /></span><span>cyberclouds</span></button>
-      <nav aria-label="Legal pages"><button className={isPrivacy ? 'active' : ''} onClick={() => onNavigate('/privacy')}>Privacy</button><button className={!isPrivacy ? 'active' : ''} onClick={() => onNavigate('/terms')}>Terms</button></nav>
+      <nav aria-label="Legal pages"><button className={!isPrivacy ? 'active' : ''} onClick={() => onNavigate('/terms')}>Terms and Conditions</button><button className={isPrivacy ? 'active' : ''} onClick={() => onNavigate('/privacy')}>Privacy Policy</button></nav>
       <button className="legal-return" onClick={() => onNavigate(signedIn ? '/' : '/login')}>{signedIn ? 'Open library' : 'Sign in'} <span>→</span></button>
     </header>
-    <section className="legal-hero"><span className="home-section-kicker">CYBERCLOUDS / {isPrivacy ? 'YOUR DATA' : 'SERVICE RULES'}</span><h1>{isPrivacy ? 'Privacy policy' : 'Terms and conditions'}<span>.</span></h1><p>Clear information about using CyberClouds and how the service handles your account.</p><small>Last updated October 8, 2026</small></section>
-    <article className="legal-document">{sections.map((section, index) => <section key={section.title}><span className="legal-section-number">{String(index + 1).padStart(2, '0')}</span><div><h2>{section.title}</h2>{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div></section>)}<aside className="legal-contact"><span>QUESTIONS OR REQUESTS</span><a href={`mailto:${paymentSettings.contactEmail}`}>{paymentSettings.contactEmail}</a></aside></article>
-    <footer className="legal-footer"><button onClick={() => onNavigate('/')}>← {signedIn ? 'Back to library' : 'Back to CyberClouds'}</button><span>CYBERCLOUDS / PRIVATE KNOWLEDGE</span><nav><button onClick={() => onNavigate('/privacy')}>Privacy</button><button onClick={() => onNavigate('/terms')}>Terms</button></nav></footer>
+    <section className="legal-hero"><span className="home-section-kicker">CYBERCLOUDS / {isPrivacy ? 'YOUR DATA' : 'SERVICE RULES'}</span><h1>{isPrivacy ? 'Privacy Policy' : 'Terms and Conditions'}<span>.</span></h1><p>Clear information about using CyberClouds and how the service handles your account.</p><small>Last updated October 8, 2026</small></section>
+    <article className="legal-document">{sections.map((section, index) => <section key={section.title}><span className="legal-section-number">{String(index + 1).padStart(2, '0')}</span><div><h2>{section.title}</h2>{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div></section>)}<aside className="legal-contact"><span>QUESTIONS OR REQUESTS</span><a href={`mailto:${legalContactEmail}`}>{legalContactEmail}</a></aside></article>
+    <footer className="legal-footer"><button onClick={() => onNavigate('/')}>← {signedIn ? 'Back to library' : 'Back to CyberClouds'}</button><span>CYBERCLOUDS / PRIVATE KNOWLEDGE</span><nav><button onClick={() => onNavigate('/terms')}>Terms and Conditions</button><button onClick={() => onNavigate('/privacy')}>Privacy Policy</button></nav></footer>
   </main>;
 }
 
@@ -144,7 +145,9 @@ async function request(path, options = {}) {
     const fallback = response.status === 429
       ? 'Too many sign-in attempts. Please wait before trying again.'
       : `Request failed (${response.status})`;
-    throw new Error(result.error || fallback);
+    const error = new Error(result.error || fallback);
+    error.status = response.status;
+    throw error;
   }
   return result;
 }
@@ -221,6 +224,8 @@ function App() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [logoutFeedbackOpen, setLogoutFeedbackOpen] = useState(false);
+  const [logoutRating, setLogoutRating] = useState(0);
+  const [logoutFeedbackBusy, setLogoutFeedbackBusy] = useState(false);
   const [adminUserSearch, setAdminUserSearch] = useState('');
   const [referralStats, setReferralStats] = useState(null);
   const [referralStatsLoading, setReferralStatsLoading] = useState(false);
@@ -268,7 +273,9 @@ function App() {
             setReferralStats(referralResult.referral);
             setReferralStatsError('');
           } catch (error) {
-            setReferralStatsError(error.message);
+            setReferralStatsError(error.status === 404
+              ? 'Referral API route not found. Restart the local API or redeploy the latest server version, then retry.'
+              : error.message);
           }
         }
       } catch {}
@@ -481,15 +488,27 @@ function App() {
   }
 
   function signOut() {
+    setLogoutRating(0);
+    setLogoutFeedbackBusy(false);
     setLogoutFeedbackOpen(true);
   }
 
   async function finishSignOut() {
-    await request('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    if (logoutRating < 1 || logoutFeedbackBusy) return;
+    setLogoutFeedbackBusy(true);
+    await request('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating: logoutRating }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => {});
+    await request('/api/auth/logout', { method: 'POST', signal: AbortSignal.timeout(5000) }).catch(() => {});
     setUser(null);
     setAdminOpen(false);
     setProfileOpen(false);
     setLogoutFeedbackOpen(false);
+    setLogoutRating(0);
+    setLogoutFeedbackBusy(false);
     setReferralStats(null);
     setReferralNotice('');
     setArticle(null);
@@ -506,7 +525,11 @@ function App() {
       setReferralStats(result.referral);
     } catch (error) {
       setReferralStats(null);
-      setReferralStatsError(error.name === 'TimeoutError' ? 'The request took too long. Please retry.' : error.message || 'Could not load your referral code.');
+      setReferralStatsError(error.name === 'TimeoutError'
+        ? 'The request took too long. Please retry.'
+        : error.status === 404
+          ? 'Referral API route not found. Restart the local API or redeploy the latest server version, then retry.'
+          : error.message || 'Could not load your referral code.');
     } finally {
       setReferralStatsLoading(false);
     }
@@ -959,7 +982,9 @@ function App() {
         <footer className="library-footer"><span>CYBERCLOUDS / SOURCE MATERIAL</span><span>READ ONLY FOR MEMBER ACCOUNTS</span><nav className="library-legal-links"><button onClick={() => navigate('/privacy')}>Privacy</button><button onClick={() => navigate('/terms')}>Terms</button></nav></footer>
       </>}
     </main>
-    {logoutFeedbackOpen && <div className="logout-feedback-backdrop"><section className="logout-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="logout-feedback-title"><div className="logout-feedback-icon"><LogOut size={18} /></div><h2 id="logout-feedback-title">How was your experience this time?</h2><div className="logout-feedback-actions"><button className="quiet-button" onClick={() => setLogoutFeedbackOpen(false)}>Keep learning</button><button className="primary-small" onClick={finishSignOut}>Logout <span>→</span></button></div></section></div>}
+    {logoutFeedbackOpen && <div className="logout-feedback-backdrop"><section className="logout-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="logout-feedback-title"><div className="logout-feedback-icon"><LogOut size={18} /></div><h2 id="logout-feedback-title">How was your experience this time?</h2><p className="logout-feedback-prompt">Choose a star rating before signing out.</p><div className="logout-feedback-rating" role="group" aria-label="Rate your experience">
+      {[1, 2, 3, 4, 5].map((rating) => <button key={rating} className={logoutRating >= rating ? 'selected' : ''} type="button" aria-pressed={logoutRating === rating} disabled={logoutFeedbackBusy} aria-label={`${rating} ${rating === 1 ? 'star' : 'stars'}`} onClick={() => setLogoutRating(rating)}><Star size={29} fill={logoutRating >= rating ? 'currentColor' : 'none'} /></button>)}
+    </div><div className="logout-feedback-actions"><button className="quiet-button" disabled={logoutFeedbackBusy} onClick={() => { setLogoutFeedbackOpen(false); setLogoutRating(0); }}>Keep learning</button><button className="primary-small" disabled={logoutRating < 1 || logoutFeedbackBusy} onClick={finishSignOut}>{logoutFeedbackBusy ? 'Signing out…' : 'Logout'} <span>→</span></button></div></section></div>}
     {paymentOpen && <div className="payment-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPaymentOpen(false); }}><section className="payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-title"><button className="payment-modal-close" aria-label="Close payment details" onClick={() => setPaymentOpen(false)}><X size={18} /></button><span className="section-kicker">MODULE ACCESS / PAYMENT</span><h2 id="payment-title">How to get full access</h2><div className="payment-email-warning referral-offer" role="note"><strong>Earn the full course free</strong><p>Refer 10 learners. When at least one of them has a confirmed purchase, all modules unlock on your account. Find your invite link in My profile.</p></div><ol><li>Scan the QR code with GPay or another UPI app to make your payment.</li><li>Submit your payment details through the Google Form below.</li><li>The admin will review your payment. Verification may take time; you’ll receive an email at your registered address from <strong>{paymentSettings.contactEmail}</strong> when access is updated.</li></ol><div className="payment-email-warning" role="note"><strong>Important: use your CyberClouds account email</strong><p>Enter the same email address in the Google Form that you used to sign up or log in here. If the email does not match, we may not be able to identify your account, and access may be delayed or not granted even after payment. Payments may not be refundable, so please check the email carefully before submitting.</p></div><div className="payment-upi-details"><div className="payment-qr-frame"><img src={paymentSettings.qrImage} alt="GPay QR code for payment" /></div></div>{paymentSettings.googleFormUrl ? <a className="payment-form-link" href={paymentSettings.googleFormUrl} target="_blank" rel="noreferrer">Open payment Google Form <span>↗</span></a> : <p className="payment-form-pending">Payment Google Form link will be added here.</p>}<p className="payment-refund-note">Please review the payment details carefully before submitting the form. Contact the administrator if you need help.</p><button className="primary-small" onClick={() => setPaymentOpen(false)}>Got it</button></section></div>}
   </div>;
 }
