@@ -18,7 +18,7 @@ function PasswordField({ label, name, autoComplete, minLength, maxLength = 128, 
 function useAutoDismiss(message, clearMessage) {
   useEffect(() => {
     if (!message) return undefined;
-    const timer = window.setTimeout(() => clearMessage(''), 1000);
+    const timer = window.setTimeout(() => clearMessage(''), 3000);
     return () => window.clearTimeout(timer);
   }, [message, clearMessage]);
 }
@@ -244,8 +244,6 @@ function App() {
   const [referralClaimBusy, setReferralClaimBusy] = useState(false);
   const [referralCodeInput, setReferralCodeInput] = useState(() => new URLSearchParams(window.location.search).get('ref') || '');
 
-  useAutoDismiss(authError, setAuthError);
-  useAutoDismiss(authNotice, setAuthNotice);
   useAutoDismiss(articleError, setArticleError);
   useAutoDismiss(profileError, setProfileError);
   useAutoDismiss(profileNotice, setProfileNotice);
