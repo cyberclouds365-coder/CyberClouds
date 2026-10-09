@@ -910,7 +910,7 @@ function App() {
   const currentModuleIndex = Math.max(0, sections.findIndex((section) => section.slug === activeSection));
   const fullAccess = Boolean(user.hasFullAccess ?? (user.role === 'admin' || user.paymentDone || user.referralRewarded));
   const referralRewardGranted = Boolean(user.referralRewarded || referralStats?.rewardUnlocked);
-  const referralRewardReady = Boolean(referralStats?.rewardEligible) && !referralRewardGranted;
+  const referralRewardReady = Number(referralStats?.purchases || 0) >= 2 && !referralRewardGranted;
   const filteredUsers = users.filter((account) => `${account.name} ${account.email} ${account.role} ${account.paymentDone ? 'paid' : 'pending'} ${account.referralRewarded ? 'referral free unlocked' : ''}`.toLowerCase().includes(adminUserSearch.trim().toLowerCase()));
   const selectedSection = adminSections.find((section) => section.slug === selectedAdminSection);
   const selectedSectionDocuments = adminDocuments.filter((document) => document.sectionSlug === selectedAdminSection);
