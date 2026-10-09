@@ -1436,74 +1436,61 @@ app.get('/api/admin/users', requireAuth, requireAdmin, async (request, response,
   } catch (error) { next(error); }
 });
 
-app.patch('/api/admin/users/:id/payment', requireAuth, requireAdmin, async (request, response, next) => {
+app.patch('/api/admin/users/:id/payment', requireAuth, requireAdmin, paymentConfirmationEmailLimiter, async (request, response, next) => {
   const { paymentDone } = request.body;
-  if (typeof paymentDone !== 'boolean') return response.status(400).json({ error: 'paymentDone must be true or false' });
+  if (paymentDone !== true) return response.status(409).json({ error: 'Payment cannot be reverted from Done to Pending' });
   try {
     let account;
     let referralRewardGrantedTo = null;
     if (pool) {
-      const result = await pool.query(`UPDATE app_users
-        SET payment_done = $1,
-            payment_confirmation_email_sent = CASE WHEN $1 THEN payment_confirmation_email_sent ELSE FALSE END
-        WHERE id = $2 AND role = 'user'
+      const changed = await pool.query(`UPDATE app_users SET payment_done = TRUE
+        WHERE id = $1 AND role = 'user' AND payment_done = FALSE
         RETURNING id, name, email, role, is_active, payment_done, payment_confirmation_email_sent,
-          referral_rewarded, referral_code, referred_by_user_id`, [paymentDone, request.params.id]);
-      if (!result.rowCount) return response.status(404).json({ error: 'User not found' });
-      account = result.rows[0];
+          referral_rewarded, referral_code, referred_by_user_id`, [request.params.id]);
+      if (changed.rowCount) {
+        account = changed.rows[0];
+      } else {
+        const existing = await pool.query(`SELECT id, name, email, role, is_active, payment_done,
+            payment_confirmation_email_sent, referral_rewarded, referral_code, referred_by_user_id
+          FROM app_users WHERE id = $1`, [request.params.id]);
+        if (!existing.rowCount) return response.status(404).json({ error: 'User not found' });
+        account = existing.rows[0];
+        if (account.role !== 'user') return response.status(409).json({ error: 'Payment can only be confirmed for user accounts' });
+      }
     } else {
       account = memoryUsers.find((item) => String(item.id) === String(request.params.id));
       if (!account || account.role !== 'user') return response.status(404).json({ error: 'User not found' });
-      account.payment_done = paymentDone;
-      if (!paymentDone) account.payment_confirmation_email_sent = false;
+      account.payment_done = true;
     }
-    if (paymentDone) {
+    if (!account.payment_confirmation_email_sent) {
       if (account.referred_by_user_id && await getReferralEligibility(account.referred_by_user_id)) {
         const referrer = await findUserById(account.referred_by_user_id);
         if (referrer && !referrer.referral_rewarded) referralRewardGrantedTo = { id: referrer.id, name: referrer.name, email: referrer.email, rewardEligible: true };
       }
-    }
-    return response.json({ user: publicUser(account), referralRewardGrantedTo });
-  } catch (error) { next(error); }
-});
-
-app.post('/api/admin/users/:id/payment-confirmation-email', requireAuth, requireAdmin, paymentConfirmationEmailLimiter, async (request, response, next) => {
-  try {
-    let account;
-    if (pool) {
-      const result = await pool.query(`SELECT id, name, email, role, is_active, payment_done,
-          payment_confirmation_email_sent, referral_rewarded, referral_code, referred_by_user_id
-        FROM app_users WHERE id = $1`, [request.params.id]);
-      if (!result.rowCount) return response.status(404).json({ error: 'User not found' });
-      account = result.rows[0];
-    } else {
-      account = memoryUsers.find((item) => String(item.id) === String(request.params.id));
-      if (!account) return response.status(404).json({ error: 'User not found' });
-    }
-    if (account.role !== 'user') return response.status(409).json({ error: 'Payment confirmation emails can only be sent to user accounts' });
-    if (!account.payment_done) return response.status(409).json({ error: 'Confirm the payment before sending its email' });
-    if (account.payment_confirmation_email_sent) return response.status(409).json({ error: 'Payment confirmation email was already sent. Set payment to Pending to allow another send.' });
-
-    if (pool) {
-      const sendClaim = await pool.query(`UPDATE app_users SET payment_confirmation_email_sent = TRUE
-        WHERE id = $1 AND role = 'user' AND payment_done = TRUE AND payment_confirmation_email_sent = FALSE
-        RETURNING id`, [account.id]);
-      if (!sendClaim.rowCount) {
-        return response.status(409).json({ error: 'Payment confirmation is no longer eligible to send. Refresh the user list.' });
-      }
-    }
-    account.payment_confirmation_email_sent = true;
-    try {
-      await sendPaymentConfirmation(account);
-      response.json({ user: publicUser(account), emailSent: true });
-    } catch (emailError) {
       if (pool) {
-        await pool.query('UPDATE app_users SET payment_confirmation_email_sent = FALSE WHERE id = $1', [account.id]).catch(() => {});
+        const sendClaim = await pool.query(`UPDATE app_users SET payment_confirmation_email_sent = TRUE
+          WHERE id = $1 AND role = 'user' AND payment_done = TRUE AND payment_confirmation_email_sent = FALSE
+          RETURNING id`, [account.id]);
+        if (!sendClaim.rowCount) {
+          const current = await pool.query('SELECT payment_confirmation_email_sent FROM app_users WHERE id = $1', [account.id]);
+          if (current.rows[0]?.payment_confirmation_email_sent) {
+            return response.json({ user: publicUser({ ...account, payment_confirmation_email_sent: true }), emailSent: false, emailAlreadySent: true, referralRewardGrantedTo });
+          }
+          return response.status(409).json({ error: 'Payment confirmation email is currently being processed. Refresh and try again shortly.' });
+        }
       }
-      account.payment_confirmation_email_sent = false;
-      console.error('Payment confirmation email delivery failed:', emailError.statusCode || 'unavailable');
-      response.status(502).json({ error: 'Payment confirmation email could not be sent. You can retry.' });
+      account.payment_confirmation_email_sent = true;
+      try {
+        await sendPaymentConfirmation(account);
+      } catch (emailError) {
+        if (pool) await pool.query('UPDATE app_users SET payment_confirmation_email_sent = FALSE WHERE id = $1', [account.id]).catch(() => {});
+        account.payment_confirmation_email_sent = false;
+        console.error('Payment confirmation email delivery failed:', emailError.statusCode || 'unavailable');
+        return response.status(502).json({ error: 'Payment is Done, but its confirmation email could not be sent. Click Done again to retry.' });
+      }
+      return response.json({ user: publicUser(account), emailSent: true, referralRewardGrantedTo });
     }
+    return response.json({ user: publicUser(account), emailSent: false, emailAlreadySent: true, referralRewardGrantedTo });
   } catch (error) { next(error); }
 });
 
