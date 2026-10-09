@@ -364,23 +364,13 @@ async function ensureReferralCode(userId) {
   return account.referral_code;
 }
 
-async function awardReferralCourseIfQualified(referrerId) {
-  if (!referrerId) return null;
+async function getReferralEligibility(userId) {
   if (pool) {
-    const result = await pool.query(`UPDATE app_users AS referrer
-      SET referral_rewarded = TRUE, referral_rewarded_at = NOW()
-      WHERE referrer.id = $1 AND referrer.role = 'user' AND referrer.referral_rewarded = FALSE
-        AND (SELECT COUNT(*) FROM app_users AS referred WHERE referred.referred_by_user_id = referrer.id AND referred.role = 'user') >= 10
-        AND EXISTS (SELECT 1 FROM app_users AS buyer WHERE buyer.referred_by_user_id = referrer.id AND buyer.payment_done = TRUE)
-      RETURNING referrer.id, referrer.name, referrer.email, referrer.referral_code, referrer.referral_rewarded`, [referrerId]);
-    return result.rows[0] || null;
+    const result = await pool.query(`SELECT COUNT(*) FILTER (WHERE payment_done = TRUE)::int AS purchases
+      FROM app_users WHERE referred_by_user_id = $1 AND role = 'user'`, [userId]);
+    return result.rows[0]?.purchases >= 2;
   }
-  const referrer = memoryUsers.find((user) => String(user.id) === String(referrerId));
-  if (!referrer || referrer.role !== 'user' || referrer.referral_rewarded) return null;
-  const referredUsers = memoryUsers.filter((user) => String(user.referred_by_user_id) === String(referrerId) && user.role === 'user');
-  if (referredUsers.length < 10 || !referredUsers.some((user) => user.payment_done)) return null;
-  referrer.referral_rewarded = true;
-  return referrer;
+  return memoryUsers.filter((user) => String(user.referred_by_user_id) === String(userId) && user.role === 'user' && user.payment_done).length >= 2;
 }
 
 async function getReferralStats(userId) {
@@ -408,6 +398,7 @@ async function getReferralStats(userId) {
       purchases: account?.purchases || 0,
       shares: (account?.registrations || 0) + (account?.pending_uses || 0),
       rewardUnlocked: Boolean(account?.referral_rewarded),
+      rewardEligible: (account?.purchases || 0) >= 2,
     };
   }
   const account = memoryUsers.find((user) => String(user.id) === String(userId));
@@ -421,6 +412,7 @@ async function getReferralStats(userId) {
     purchases: referredUsers.filter((user) => user.payment_done).length,
     shares: referredUsers.length + pendingReferralUses,
     rewardUnlocked: Boolean(account?.referral_rewarded),
+    rewardEligible: referredUsers.filter((user) => user.payment_done).length >= 2,
   };
 }
 
@@ -777,6 +769,24 @@ async function sendPaymentConfirmation(user) {
   });
 }
 
+async function sendReferralRewardEmail(user) {
+  const libraryUrl = process.env.APP_URL || 'http://localhost:5173';
+  const html = emailFrame({
+    preheader: 'Your referral reward is granted. All CyberClouds modules are unlocked.',
+    eyebrow: 'REFERRAL / REWARD GRANTED',
+    title: 'Your reward is granted',
+    recipientName: user.name,
+    content: `<p style="margin:0 0 20px;color:#536a84;font-size:14px;line-height:1.7">You successfully referred two learners whose payments were confirmed. Your referral reward is now granted, and you can access every CyberClouds module.</p><a href="${escapeHtml(libraryUrl)}" style="display:inline-block;padding:12px 18px;border-radius:4px;background:#1551a2;color:#fff;text-decoration:none;font-size:13px;font-weight:700">Open your library&nbsp; →</a>`,
+    footer: 'Thank you for sharing CyberClouds.',
+  });
+  await sendBrandedEmail({
+    to: user.email,
+    subject: 'Referral reward granted — all CyberClouds modules unlocked',
+    text: `Hi ${user.name},\n\nYour referral reward is granted. Two learners who used your referral have confirmed payments, so you can now access all CyberClouds modules. Open your library: ${libraryUrl}\n\nThank you for sharing CyberClouds.`,
+    html,
+  });
+}
+
 app.get('/api/health', async (_request, response) => {
   if (!pool) return response.json({ status: 'ok', database: 'demo-memory' });
   try {
@@ -912,7 +922,6 @@ app.post('/api/auth/verify-signup', signupVerificationLimiter, async (request, r
       memoryUsers.push(user);
       memorySignupVerifications.delete(normalizedEmail);
     }
-    await awardReferralCourseIfQualified(user.referred_by_user_id);
     await issueSession(response, user);
     response.status(201).json({ user: publicUser(user) });
   } catch (error) { next(error); }
@@ -940,14 +949,13 @@ app.post('/api/auth/forgot-password', passwordResetRequestLimiter, async (reques
   const requestStartedAt = Date.now();
   try {
     const account = await findUserByEmail(email);
-    if (account?.is_active) {
-      const code = String(randomInt(100000, 1000000));
-      const otpHash = await storePasswordResetCode(email, code);
-      if (otpHash) void sendPasswordResetCode(email, code, otpHash).catch(() => {});
-    }
+    if (!account?.is_active) return response.status(404).json({ error: 'Account or email is invalid. Check the email address and try again.' });
+    const code = String(randomInt(100000, 1000000));
+    const otpHash = await storePasswordResetCode(email, code);
+    if (otpHash) void sendPasswordResetCode(email, code, otpHash).catch(() => {});
     const remainingDelay = 300 - (Date.now() - requestStartedAt);
     if (remainingDelay > 0) await new Promise((resolve) => setTimeout(resolve, remainingDelay));
-    response.status(202).json({ message: 'If an active account uses this address, a verification code will arrive shortly.' });
+    response.status(202).json({ message: 'A verification code will arrive shortly.' });
   } catch (error) { next(error); }
 });
 
@@ -1065,6 +1073,37 @@ app.post('/api/feedback', requireAuth, async (request, response, next) => {
 app.get('/api/referrals/me', requireAuth, async (request, response, next) => {
   try { response.json({ referral: await getReferralStats(request.user.id) }); }
   catch (error) { next(error); }
+});
+
+app.post('/api/referrals/claim', requireAuth, async (request, response, next) => {
+  if (request.user.role !== 'user') return response.status(403).json({ error: 'Referral rewards are available to reader accounts only.' });
+  if (request.user.referral_rewarded) return response.status(409).json({ error: 'Your referral reward has already been granted.' });
+  try {
+    let account;
+    if (pool) {
+    const result = await pool.query(`UPDATE app_users AS owner SET referral_rewarded = TRUE, referral_rewarded_at = NOW()
+        WHERE owner.id = $1 AND owner.role = 'user' AND owner.referral_rewarded = FALSE
+          AND (SELECT COUNT(*) FROM app_users AS referred WHERE referred.referred_by_user_id = owner.id AND referred.role = 'user' AND referred.payment_done = TRUE) >= 2
+        RETURNING id, name, email, role, is_active, payment_done, referral_code, referral_rewarded`, [request.user.id]);
+      account = result.rows[0];
+    } else {
+      account = memoryUsers.find((user) => String(user.id) === String(request.user.id));
+      if (account && !account.referral_rewarded && await getReferralEligibility(request.user.id)) {
+        account.referral_rewarded = true;
+        account.referral_rewarded_at = new Date();
+      } else account = null;
+    }
+    if (!account) return (await getReferralEligibility(request.user.id))
+      ? response.status(409).json({ error: 'Your referral reward has already been granted.' })
+      : response.status(400).json({ error: 'Refer two learners and wait for both payments to be confirmed before claiming your reward.' });
+    try {
+      await sendReferralRewardEmail(account);
+      response.json({ user: publicUser(account), emailSent: true, message: 'Reward granted. All modules are now unlocked.' });
+    } catch (emailError) {
+      console.error('Referral reward email delivery failed:', emailError.statusCode || 'unavailable');
+      response.json({ user: publicUser(account), emailSent: false, message: 'Reward granted and all modules unlocked, but the email could not be sent. Contact an administrator to retry.' });
+    }
+  } catch (error) { next(error); }
 });
 
 app.patch('/api/profile', requireAuth, async (request, response, next) => {
@@ -1395,8 +1434,10 @@ app.patch('/api/admin/users/:id/payment', requireAuth, requireAdmin, async (requ
       account.payment_done = paymentDone;
     }
     if (paymentDone) {
-      const referralReward = await awardReferralCourseIfQualified(account.referred_by_user_id);
-      if (referralReward) referralRewardGrantedTo = { id: referralReward.id, name: referralReward.name, email: referralReward.email };
+      if (account.referred_by_user_id && await getReferralEligibility(account.referred_by_user_id)) {
+        const referrer = await findUserById(account.referred_by_user_id);
+        if (referrer && !referrer.referral_rewarded) referralRewardGrantedTo = { id: referrer.id, name: referrer.name, email: referrer.email, rewardEligible: true };
+      }
     }
     if (!paymentDone) return response.json({ user: publicUser(account), emailSent: false, referralRewardGrantedTo });
     try {
