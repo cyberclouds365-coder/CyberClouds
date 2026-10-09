@@ -172,7 +172,7 @@
 
 .referral-progress-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -203,6 +203,53 @@
   font: 8px var(--mono);
   letter-spacing: .2px;
   text-transform: uppercase;
+}
+
+/* Keep the admin workspace in the viewport and use one content scroll area. */
+.library-main:has(.admin-view) {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.library-main:has(.admin-view) .library-topbar {
+  flex: 0 0 65px;
+}
+
+.library-main:has(.admin-view) .admin-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 25px 0 18px;
+}
+
+.library-main:has(.admin-view) .admin-view > .page-kicker,
+.library-main:has(.admin-view) .admin-view > h1,
+.library-main:has(.admin-view) .admin-view > .page-intro,
+.library-main:has(.admin-view) .admin-tabs {
+  flex: none;
+}
+
+.library-main:has(.admin-view) .admin-view > .content-manager,
+.library-main:has(.admin-view) .admin-view > .user-management {
+  min-height: 0;
+  height: auto;
+  flex: 1;
+}
+
+.library-main:has(.admin-view) .admin-view > .user-management {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.library-main:has(.admin-view) .admin-content-preview {
+  max-height: none;
+  overflow: visible;
 }
 
 .referral-progress-track {

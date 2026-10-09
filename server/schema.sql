@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS app_users (
   role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   payment_done BOOLEAN NOT NULL DEFAULT FALSE,
+  payment_confirmation_email_sent BOOLEAN NOT NULL DEFAULT FALSE,
   referral_code TEXT,
   referred_by_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
   referral_rewarded BOOLEAN NOT NULL DEFAULT FALSE,
@@ -26,6 +27,7 @@ CREATE TABLE IF NOT EXISTS app_users (
 
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS payment_done BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS payment_confirmation_email_sent BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS referral_code TEXT;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS referred_by_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS referral_rewarded BOOLEAN NOT NULL DEFAULT FALSE;
