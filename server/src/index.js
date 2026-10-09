@@ -461,6 +461,7 @@ async function getAdminReferralSummary(currentUserId) {
         id: row.id, name: row.name, email: row.email,
         referralRewarded: Boolean(row.referral_rewarded), shares: row.shares,
         registrations: row.registrations, logins: row.logins, purchases: row.purchases,
+        rewardEligible: Number(row.purchases) >= 2 && !Boolean(row.referral_rewarded),
       })),
     };
   }
@@ -482,6 +483,7 @@ async function getAdminReferralSummary(currentUserId) {
       registrations: referredUsers.length,
       logins: referredUsers.filter((user) => Number(user.login_count || 0) > 0).length,
       purchases: referredUsers.filter((user) => user.payment_done).length,
+      rewardEligible: referredUsers.filter((user) => user.payment_done).length >= 2 && !Boolean(owner.referral_rewarded),
     };
   }).filter((row) => row.registrations > 0 || row.shares > 0)
     .sort((a, b) => b.registrations - a.registrations || b.shares - a.shares);
@@ -1100,8 +1102,15 @@ app.post('/api/referrals/claim', requireAuth, async (request, response, next) =>
       await sendReferralRewardEmail(account);
       response.json({ user: publicUser(account), emailSent: true, message: 'Reward granted. All modules are now unlocked.' });
     } catch (emailError) {
+      if (pool) {
+        await pool.query(`UPDATE app_users SET referral_rewarded = FALSE, referral_rewarded_at = NULL
+          WHERE id = $1 AND referral_rewarded = TRUE`, [account.id]);
+      } else {
+        account.referral_rewarded = false;
+        account.referral_rewarded_at = null;
+      }
       console.error('Referral reward email delivery failed:', emailError.statusCode || 'unavailable');
-      response.json({ user: publicUser(account), emailSent: false, message: 'Reward granted and all modules unlocked, but the email could not be sent. Contact an administrator to retry.' });
+      response.status(503).json({ error: 'The reward email could not be sent, so the reward was not finalized. Please try claiming again later.' });
     }
   } catch (error) { next(error); }
 });
