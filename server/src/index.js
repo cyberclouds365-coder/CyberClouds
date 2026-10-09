@@ -398,7 +398,7 @@ async function getReferralStats(userId) {
       purchases: account?.purchases || 0,
       shares: (account?.registrations || 0) + (account?.pending_uses || 0),
       rewardUnlocked: Boolean(account?.referral_rewarded),
-      rewardEligible: (account?.purchases || 0) >= 2,
+      rewardEligible: (account?.purchases || 0) >= 2 && !Boolean(account?.referral_rewarded),
     };
   }
   const account = memoryUsers.find((user) => String(user.id) === String(userId));
@@ -412,7 +412,7 @@ async function getReferralStats(userId) {
     purchases: referredUsers.filter((user) => user.payment_done).length,
     shares: referredUsers.length + pendingReferralUses,
     rewardUnlocked: Boolean(account?.referral_rewarded),
-    rewardEligible: referredUsers.filter((user) => user.payment_done).length >= 2,
+    rewardEligible: referredUsers.filter((user) => user.payment_done).length >= 2 && !Boolean(account?.referral_rewarded),
   };
 }
 
