@@ -39,7 +39,16 @@ app.use(cors({
 
 const port = Number(process.env.PORT || 3000);
 const databaseUrl = process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim();
-const pool = databaseUrl ? new pg.Pool({ connectionString: databaseUrl }) : null;
+const productionMode = process.env.NODE_ENV === 'production';
+const pool = databaseUrl ? new pg.Pool({
+  connectionString: databaseUrl,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  ssl: productionMode || /sslmode=require/i.test(databaseUrl)
+    ? { rejectUnauthorized: process.env.PG_SSL_REJECT_UNAUTHORIZED !== 'false' }
+    : undefined,
+}) : null;
 
 function validateDatabaseUrl(value) {
   if (!value) return;
@@ -56,12 +65,13 @@ function validateDatabaseUrl(value) {
 
 
 const signupSecret = process.env.JWT_SECRET || randomBytes(48).toString('hex');
-const cookieName = process.env.NODE_ENV === 'production' ? '__Host-fieldnotes_session' : 'fieldnotes_session';
+const cookieName = productionMode ? '__Host-fieldnotes_session' : 'fieldnotes_session';
 const cookieLifetime = 8 * 60 * 60 * 1000;
+const maxSessionsPerUser = 8;
 const sessionCookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  secure: productionMode,
+  sameSite: productionMode ? 'none' : 'lax',
   path: '/',
 };
 const contentRoot = join(serverDir, '../content');
@@ -215,6 +225,33 @@ const isStrongPassword = (password) => typeof password === 'string'
   && /[A-Z]/.test(password)
   && /\d/.test(password)
   && /[^A-Za-z0-9]/.test(password);
+const isValidEmail = (email) => typeof email === 'string' && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const dummyLoginHash = bcrypt.hashSync(randomBytes(32).toString('hex'), 12);
+
+function sanitizePersonName(value) {
+  return String(value || '').replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeSvg(content) {
+  if (typeof content !== 'string') return '';
+  return content
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '')
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object[\s\S]*?<\/object>/gi, '')
+    .replace(/<embed\b[^>]*>/gi, '')
+    .replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/javascript\s*:/gi, '')
+    .replace(/xlink:href\s*=\s*("|')\s*javascript:[^"']*\1/gi, '');
+}
+
+function sendSvg(response, content) {
+  response.set({
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox",
+    'X-Content-Type-Options': 'nosniff',
+  });
+  response.type('image/svg+xml').send(sanitizeSvg(content));
+}
 
 async function readCorrectedText(document) {
   let text = document.content;
@@ -253,8 +290,18 @@ async function initializeContent() {
 
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-  strictTransportSecurity: process.env.NODE_ENV === 'production'
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'none'"],
+      formAction: ["'none'"],
+    },
+  },
+  strictTransportSecurity: productionMode
     ? { maxAge: 31536000, includeSubDomains: false, preload: false }
     : false,
 }));
@@ -262,13 +309,27 @@ app.disable('x-powered-by');
 app.use((request, response, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return next();
   const origin = request.get('origin');
-  if (process.env.NODE_ENV === 'production' && !origin) return response.status(403).json({ error: 'A valid request origin is required' });
+  if (productionMode && !origin) return response.status(403).json({ error: 'A valid request origin is required' });
   if (origin && !allowedClientOrigins.has(origin)) return response.status(403).json({ error: 'This request origin is not allowed' });
   next();
 });
+app.use((request, response, next) => {
+  if (!['POST', 'PATCH', 'PUT'].includes(request.method)) return next();
+  const length = Number(request.headers['content-length'] || 0);
+  if (!length) return next();
+  const contentType = request.headers['content-type'] || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return response.status(415).json({ error: 'JSON request body is required' });
+  }
+  next();
+});
 
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '100kb', type: 'application/json' }));
 app.use(cookieParser());
+app.use('/api/auth', (_request, response, next) => {
+  response.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  next();
+});
 
 const loginIpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -293,20 +354,49 @@ const loginLimiter = rateLimit({
   },
   handler: (_request, response) => response.status(429).json({ error: 'Too many sign-in attempts. Wait 15 minutes before trying again.' }),
 });
-const signupLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false });
-const signupVerificationLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
-const passwordResetRequestLimiter = rateLimit({
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 600,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  handler: (_request, response) => response.status(429).json({ error: 'Too many requests. Wait a few minutes and try again.' }),
+});
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+});
+const signupVerificationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+});
+function emailRateLimitKey(request) {
+  const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : '';
+  const emailKey = createHash('sha256').update(email).digest('hex');
+  return `${ipKeyGenerator(request.ip)}:${emailKey}`;
+}
+const passwordResetRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  keyGenerator: emailRateLimitKey,
   handler: (_request, response) => response.status(429).json({ error: 'Too many reset requests. Wait a while and try again.' }),
 });
 const passwordResetVerifyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 30,
+  limit: 10,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  keyGenerator: emailRateLimitKey,
   handler: (_request, response) => response.status(429).json({ error: 'Too many verification attempts. Wait a while and try again.' }),
 });
 const paymentConfirmationEmailLimiter = rateLimit({
@@ -314,8 +404,10 @@ const paymentConfirmationEmailLimiter = rateLimit({
   limit: 10,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   handler: (_request, response) => response.status(429).json({ error: 'Too many payment email requests. Wait 15 minutes before trying again.' }),
 });
+app.use('/api', apiLimiter);
 
 async function findUserByEmail(email) {
   if (!pool) return memoryUsers.find((user) => user.email === email) || null;
@@ -518,8 +610,16 @@ async function issueSession(response, user) {
   const expiresAt = new Date(Date.now() + cookieLifetime);
   if (pool) {
     await pool.query('DELETE FROM auth_sessions WHERE expires_at <= NOW()');
+    await pool.query(`DELETE FROM auth_sessions WHERE user_id = $1 AND token_hash NOT IN (
+      SELECT token_hash FROM (
+        SELECT token_hash FROM auth_sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
+      ) keep_sessions
+    )`, [user.id, maxSessionsPerUser - 1]);
     await pool.query('INSERT INTO auth_sessions (token_hash, user_id, expires_at, last_seen_at) VALUES ($1, $2, $3, NOW())', [tokenHash, user.id, expiresAt]);
   } else {
+    const existing = [...memorySessions.entries()].filter(([, session]) => String(session.userId) === String(user.id));
+    existing.sort((a, b) => new Date(b[1].expiresAt) - new Date(a[1].expiresAt));
+    existing.slice(maxSessionsPerUser - 1).forEach(([hash]) => memorySessions.delete(hash));
     memorySessions.set(tokenHash, { userId: user.id, expiresAt, lastSeenAt: new Date() });
   }
   response.cookie(cookieName, token, { ...sessionCookieOptions, maxAge: cookieLifetime });
@@ -756,6 +856,7 @@ async function sendPasswordResetCode(email, code, otpHash) {
     if (pool) await pool.query('DELETE FROM password_reset_verifications WHERE email = $1 AND otp_hash = $2', [email, otpHash]).catch(() => {});
     else if (memoryPasswordResets.get(email)?.otp_hash === otpHash) memoryPasswordResets.delete(email);
     console.error('Password reset email delivery failed:', error.statusCode || 'unavailable');
+    throw error;
   }
 }
 
@@ -811,10 +912,11 @@ app.post('/api/auth/signup', signupLimiter, async (request, response, next) => {
   const { name, email, password } = request.body;
   if (request.body.termsAccepted !== true && request.body.termsAccepted !== 'true') return response.status(400).json({ error: 'Please agree to the Terms and Conditions and Privacy Policy' });
   const referralCode = typeof request.body.referralCode === 'string' ? request.body.referralCode.trim().toUpperCase() : '';
-  if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) {
+  const safeName = sanitizePersonName(name);
+  if (safeName.length < 2 || safeName.length > 100) {
     return response.status(400).json({ error: 'Enter a name between 2 and 100 characters' });
   }
-  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+  if (!isValidEmail(email)) {
     return response.status(400).json({ error: 'Enter a valid email address' });
   }
   if (!isStrongPassword(password)) {
@@ -831,14 +933,14 @@ app.post('/api/auth/signup', signupLimiter, async (request, response, next) => {
       referredByUserId = referrer.id;
     }
     const passwordHash = await bcrypt.hash(password, 12);
-    await sendSignupVerification({ name: name.trim(), email: normalizedEmail, passwordHash, referredByUserId, termsAcceptedAt: new Date() });
+    await sendSignupVerification({ name: safeName, email: normalizedEmail, passwordHash, referredByUserId, termsAcceptedAt: new Date() });
     response.status(202).json({ verificationRequired: true, email: normalizedEmail });
   } catch (error) { next(error); }
 });
 
 app.post('/api/auth/resend-signup-code', signupVerificationLimiter, async (request, response, next) => {
   const { email } = request.body;
-  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+  if (!isValidEmail(email)) {
     return response.status(400).json({ error: 'Enter a valid email address' });
   }
   const normalizedEmail = email.trim().toLowerCase();
@@ -859,7 +961,7 @@ app.post('/api/auth/resend-signup-code', signupVerificationLimiter, async (reque
 
 app.post('/api/auth/verify-signup', signupVerificationLimiter, async (request, response, next) => {
   const { email, code } = request.body;
-  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+  if (!isValidEmail(email)) {
     return response.status(400).json({ error: 'Enter a valid email address' });
   }
   if (typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) return response.status(400).json({ error: 'Enter the 6-digit verification code' });
@@ -939,10 +1041,13 @@ app.post('/api/auth/verify-signup', signupVerificationLimiter, async (request, r
 
 app.post('/api/auth/login', loginIpLimiter, loginLimiter, async (request, response, next) => {
   const { email, password } = request.body;
-  if (typeof email !== 'string' || typeof password !== 'string') return response.status(400).json({ error: 'Email and password are required' });
+  if (!isValidEmail(email) || typeof password !== 'string' || password.length < 1 || password.length > 128) {
+    return response.status(400).json({ error: 'Email and password are required' });
+  }
   try {
     const user = await findUserByEmail(email.trim().toLowerCase());
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) return response.status(401).json({ error: 'Email or password is incorrect' });
+    const passwordMatches = await bcrypt.compare(password, user?.password_hash || dummyLoginHash);
+    if (!user || !passwordMatches) return response.status(401).json({ error: 'Email or password is incorrect' });
     if (!user.is_active) return response.status(403).json({ error: 'This account is inactive. Contact an administrator.' });
     if (pool) await pool.query('UPDATE app_users SET login_count = login_count + 1, last_login_at = NOW() WHERE id = $1', [user.id]);
     else user.login_count = Number(user.login_count || 0) + 1;
@@ -953,26 +1058,25 @@ app.post('/api/auth/login', loginIpLimiter, loginLimiter, async (request, respon
 
 app.post('/api/auth/forgot-password', passwordResetRequestLimiter, async (request, response, next) => {
   const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : '';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+  if (!isValidEmail(email)) {
     return response.status(400).json({ error: 'Enter a valid email address' });
   }
-  const requestStartedAt = Date.now();
   try {
     const account = await findUserByEmail(email);
-    if (!account?.is_active) return response.status(404).json({ error: 'Account or email is invalid. Check the email address and try again.' });
+    if (!account) return response.status(404).json({ error: 'Email not available.' });
+    if (!account.is_active) return response.status(403).json({ error: 'This account is inactive. Contact an administrator.' });
     const code = String(randomInt(100000, 1000000));
     const otpHash = await storePasswordResetCode(email, code);
-    if (otpHash) void sendPasswordResetCode(email, code, otpHash).catch(() => {});
-    const remainingDelay = 300 - (Date.now() - requestStartedAt);
-    if (remainingDelay > 0) await new Promise((resolve) => setTimeout(resolve, remainingDelay));
-    response.status(202).json({ message: 'A verification code will arrive shortly.' });
+    if (!otpHash) return response.status(429).json({ error: 'Please wait a minute before requesting another code.' });
+    await sendPasswordResetCode(email, code, otpHash);
+    response.status(202).json({ message: 'A verification code was sent to your email.', emailSent: true });
   } catch (error) { next(error); }
 });
 
 app.post('/api/auth/reset-password', passwordResetVerifyLimiter, async (request, response, next) => {
   const { code, newPassword } = request.body || {};
   const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : '';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return response.status(400).json({ error: 'Enter a valid email address' });
+  if (!isValidEmail(email)) return response.status(400).json({ error: 'Enter a valid email address' });
   if (typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) return response.status(400).json({ error: 'Enter the 6-digit email code' });
   if (!isStrongPassword(newPassword)) return response.status(400).json({ error: 'Use at least 8 characters with uppercase, lowercase, a number, and a special character' });
   const suppliedHash = passwordResetCodeHash(email, code.trim());
@@ -1125,13 +1229,14 @@ app.post('/api/referrals/claim', requireAuth, async (request, response, next) =>
 
 app.patch('/api/profile', requireAuth, async (request, response, next) => {
   const { name } = request.body;
-  if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) return response.status(400).json({ error: 'Name must be between 2 and 100 characters' });
+  const safeName = sanitizePersonName(name);
+  if (safeName.length < 2 || safeName.length > 100) return response.status(400).json({ error: 'Name must be between 2 and 100 characters' });
   try {
     if (pool) {
-      const result = await pool.query('UPDATE app_users SET name = $1 WHERE id = $2 RETURNING id, name, email, role, is_active, payment_done, referral_code, referral_rewarded', [name.trim(), request.user.id]);
+      const result = await pool.query('UPDATE app_users SET name = $1 WHERE id = $2 RETURNING id, name, email, role, is_active, payment_done, referral_code, referral_rewarded', [safeName, request.user.id]);
       return response.json({ user: publicUser(result.rows[0]) });
     }
-    request.user.name = name.trim();
+    request.user.name = safeName;
     response.json({ user: publicUser(request.user) });
   } catch (error) { next(error); }
 });
@@ -1221,7 +1326,8 @@ function validateDocumentInput(request, response) {
     response.status(400).json({ error: 'Invalid source name or content type' });
     return null;
   }
-  return { title: title.trim(), content, sourceName: sourceName.trim(), kind };
+  const safeContent = kind === 'diagram' ? sanitizeSvg(content) : content;
+  return { title: title.trim(), content: safeContent, sourceName: sourceName.trim(), kind };
 }
 
 app.get('/api/content/sections', requireAuth, async (_request, response, next) => {
@@ -1236,7 +1342,7 @@ app.get('/api/content/:id', requireAuth, async (request, response, next) => {
   if (!(await canAccessDocument(request.user, document))) return response.status(403).json({ error: 'Complete payment to access all modules' });
   try {
     if (document.kind === 'diagram') {
-      response.type('image/svg+xml').send(document.content);
+      sendSvg(response, document.content);
       return;
     }
     const text = await readCorrectedText(document);
@@ -1254,7 +1360,7 @@ app.get('/api/content/:id/source', requireAuth, async (request, response, next) 
       response.type('text/plain').attachment(`${makeSlug(document.title) || 'content'}.txt`).send(text);
       return;
     }
-    response.type('image/svg+xml').attachment(`${makeSlug(document.title) || 'diagram'}.svg`).send(document.content);
+    response.type('image/svg+xml').attachment(`${makeSlug(document.title) || 'diagram'}.svg`).send(sanitizeSvg(document.content));
   } catch (error) { next(error); }
 });
 
@@ -1394,23 +1500,6 @@ app.delete('/api/admin/documents/:id', requireAuth, requireAdmin, async (request
   } catch (error) { next(error); }
 });
 
-app.get('/api/content/:id', requireAuth, async (request, response, next) => {
-  const document = await getDocument(request.params.id).catch(next);
-  if (!document) return response.status(404).json({ error: 'Content not found' });
-  try {
-    if (document.kind === 'diagram') return response.type('image/svg+xml').send(document.content);
-    response.json({ id: document.id, title: document.title, sourceName: document.sourceName, text: await readCorrectedText(document) });
-  } catch (error) { next(error); }
-});
-
-app.get('/api/content/:id/source', requireAuth, async (request, response, next) => {
-  const document = await getDocument(request.params.id).catch(next);
-  if (!document) return response.status(404).json({ error: 'Content not found' });
-  try {
-    if (document.kind !== 'diagram') return response.type('text/plain').attachment(`${makeSlug(document.title) || 'content'}.txt`).send(await readCorrectedText(document));
-    response.type('image/svg+xml').attachment(`${makeSlug(document.title) || 'diagram'}.svg`).send(document.content);
-  } catch (error) { next(error); }
-});
 app.get('/api/admin/users', requireAuth, requireAdmin, async (request, response, next) => {
   try {
     const now = Date.now();
@@ -1507,12 +1596,18 @@ app.patch('/api/admin/users/:id/active', requireAuth, requireAdmin, async (reque
         if (admins.rows[0].count <= 1) return response.status(409).json({ error: 'At least one active admin account must remain' });
       }
       const result = await pool.query('UPDATE app_users SET is_active = $1 WHERE id = $2 RETURNING id, name, email, role, is_active', [isActive, request.params.id]);
+      if (!isActive) await pool.query('DELETE FROM auth_sessions WHERE user_id = $1', [request.params.id]);
       return response.json({ user: publicUser(result.rows[0]) });
     }
     const target = memoryUsers.find((item) => String(item.id) === String(request.params.id));
     if (!target) return response.status(404).json({ error: 'User not found' });
     if (!isActive && target.role === 'admin' && target.is_active && memoryUsers.filter((item) => item.role === 'admin' && item.is_active).length <= 1) return response.status(409).json({ error: 'At least one active admin account must remain' });
     target.is_active = isActive;
+    if (!isActive) {
+      for (const [tokenHash, session] of memorySessions) {
+        if (String(session.userId) === String(target.id)) memorySessions.delete(tokenHash);
+      }
+    }
     response.json({ user: publicUser(target) });
   } catch (error) { next(error); }
 });
@@ -1548,19 +1643,20 @@ app.patch('/api/admin/users/:id/role', requireAuth, requireAdmin, async (request
 
 app.patch('/api/admin/users/:id', requireAuth, requireAdmin, async (request, response, next) => {
   const { name, email } = request.body;
-  if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) return response.status(400).json({ error: 'Name must be between 2 and 100 characters' });
-  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return response.status(400).json({ error: 'Enter a valid email address' });
+  const safeName = sanitizePersonName(name);
+  if (safeName.length < 2 || safeName.length > 100) return response.status(400).json({ error: 'Name must be between 2 and 100 characters' });
+  if (!isValidEmail(email)) return response.status(400).json({ error: 'Enter a valid email address' });
   try {
     const normalizedEmail = email.trim().toLowerCase();
     if (pool) {
-      const result = await pool.query('UPDATE app_users SET name = $1, email = $2 WHERE id = $3 RETURNING id, name, email, role, is_active, payment_done', [name.trim(), normalizedEmail, request.params.id]);
+      const result = await pool.query('UPDATE app_users SET name = $1, email = $2 WHERE id = $3 RETURNING id, name, email, role, is_active, payment_done', [safeName, normalizedEmail, request.params.id]);
       if (!result.rowCount) return response.status(404).json({ error: 'User not found' });
       return response.json({ user: publicUser(result.rows[0]) });
     }
     const user = memoryUsers.find((item) => String(item.id) === String(request.params.id));
     if (!user) return response.status(404).json({ error: 'User not found' });
     if (memoryUsers.some((item) => item.email === normalizedEmail && item.id !== user.id)) return response.status(409).json({ error: 'An account with this email already exists' });
-    user.name = name.trim();
+    user.name = safeName;
     user.email = normalizedEmail;
     response.json({ user: publicUser(user) });
   } catch (error) { next(error); }
@@ -1589,8 +1685,9 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (request, re
 
 app.post('/api/admin/users', requireAuth, requireAdmin, async (request, response, next) => {
   const { name, email, password } = request.body;
-  if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) return response.status(400).json({ error: 'Name must be between 2 and 100 characters' });
-  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return response.status(400).json({ error: 'Enter a valid email address' });
+  const safeName = sanitizePersonName(name);
+  if (safeName.length < 2 || safeName.length > 100) return response.status(400).json({ error: 'Name must be between 2 and 100 characters' });
+  if (!isValidEmail(email)) return response.status(400).json({ error: 'Enter a valid email address' });
   if (!isStrongPassword(password)) return response.status(400).json({ error: 'Use at least 8 characters with uppercase, lowercase, a number, and a special character' });
   const normalizedEmail = email.trim().toLowerCase();
   try {
@@ -1601,10 +1698,10 @@ app.post('/api/admin/users', requireAuth, requireAdmin, async (request, response
     if (pool) {
       const result = await pool.query(`INSERT INTO app_users (name, email, password_hash, role, is_active, payment_done, referral_code)
         VALUES ($1, $2, $3, 'user', FALSE, FALSE, $4)
-        RETURNING id, name, email, role, is_active, payment_done, referral_code, referral_rewarded, created_at`, [name.trim(), normalizedEmail, passwordHash, referralCode]);
+        RETURNING id, name, email, role, is_active, payment_done, referral_code, referral_rewarded, created_at`, [safeName, normalizedEmail, passwordHash, referralCode]);
       account = result.rows[0];
     } else {
-      account = { id: nextMemoryUserId++, name: name.trim(), email: normalizedEmail, password_hash: passwordHash, role: 'user', is_active: false, payment_done: false, referral_code: referralCode, referral_rewarded: false, created_at: new Date().toISOString() };
+      account = { id: nextMemoryUserId++, name: safeName, email: normalizedEmail, password_hash: passwordHash, role: 'user', is_active: false, payment_done: false, referral_code: referralCode, referral_rewarded: false, created_at: new Date().toISOString() };
       memoryUsers.push(account);
     }
     response.status(201).json({ user: publicUser(account) });
@@ -1619,7 +1716,8 @@ app.use((error, _request, response, _next) => {
     if (statusCode >= 500) return response.status(503).json({ error: 'Service temporarily unavailable. Please try again later.' });
     return response.status(statusCode).json({ error: error.message });
   }
-  console.error(error);
+  if (productionMode) console.error(error.message);
+  else console.error(error);
   response.status(500).json({ error: 'Something went wrong. Please try again later.' });
 });
 
@@ -1627,7 +1725,7 @@ async function start() {
   const production = process.env.NODE_ENV === 'production';
   const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase() || '';
   const adminPassword = process.env.ADMIN_PASSWORD || '';
-  if (!adminEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) throw new Error('Set a real, valid ADMIN_EMAIL');
+  if (!isValidEmail(adminEmail)) throw new Error('Set a real, valid ADMIN_EMAIL');
   if (!isStrongPassword(adminPassword)) throw new Error('Set a strong ADMIN_PASSWORD with uppercase, lowercase, a number, and a special character');
   if (production) {
     const required = ['DATABASE_URL', 'JWT_SECRET', 'APP_URL', 'BREVO_SMTP_HOST', 'BREVO_SMTP_PORT', 'BREVO_SMTP_USER', 'BREVO_SMTP_PASS', 'MAIL_FROM'];
@@ -1637,6 +1735,8 @@ async function start() {
     let appUrl;
     try { appUrl = new URL(process.env.APP_URL); } catch { throw new Error('APP_URL must be the public HTTPS origin of the client'); }
     if (appUrl.protocol !== 'https:' || appUrl.pathname !== '/' || appUrl.search || appUrl.hash) throw new Error('APP_URL must be the public HTTPS origin of the client, without a path');
+    allowedClientOrigins.clear();
+    allowedClientOrigins.add(appUrl.origin);
     if (!hasEmailSettings()) throw new Error('Email delivery configuration is incomplete');
   }
   if (production && !databaseUrl) throw new Error('DATABASE_URL is required in production; in-memory storage is only for local preview');
@@ -1658,10 +1758,6 @@ async function start() {
     memoryUsers.push({ id: nextMemoryUserId++, name: 'Site Administrator', email: adminEmail, password_hash: passwordHash, role: 'admin', is_active: true, payment_done: false, referral_code: await createReferralCode(), referral_rewarded: false });
     console.warn('PostgreSQL is not configured. Accounts use temporary in-memory storage for local preview.');
   }
-
-app.get('/api/health', async (_request, response) => {
-    response.status(200).send("Server is healthy!"); 
-});
 
   const server = app.listen(port, '0.0.0.0', () => console.log(`Fieldnotes API listening on http://0.0.0.0:${port}`));
   server.on('error', async (error) => {
