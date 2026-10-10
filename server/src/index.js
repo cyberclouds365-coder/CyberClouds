@@ -144,14 +144,17 @@ app.post('/api/upload', requireAuth, upload.single('myFile'), async (request, re
 
 function validateDatabaseUrl(value) {
   if (!value) return;
+  // Turso ke libsql:// URL ko allow karne ke liye yeh check lagaya hai
+  if (value.startsWith('libsql://')) return;
+  
   let parsedDatabaseUrl;
   try {
     parsedDatabaseUrl = new URL(value);
   } catch {
-    throw new Error('DATABASE_URL must be a PostgreSQL URL such as postgresql://postgres:password@localhost:5432/fieldnotes. Remove any leading slash or .s.PGSQL socket suffix.');
+    throw new Error('DATABASE_URL must be a valid PostgreSQL or Turso URL.');
   }
-  if (!['postgres:', 'postgresql:'].includes(parsedDatabaseUrl.protocol) || !parsedDatabaseUrl.pathname || parsedDatabaseUrl.pathname === '/' || /\.s\.PGSQL\.\d+$/.test(parsedDatabaseUrl.pathname)) {
-    throw new Error('DATABASE_URL must be a PostgreSQL URL such as postgresql://postgres:password@localhost:5432/fieldnotes. Remove any leading slash or .s.PGSQL socket suffix.');
+  if (!['postgres:', 'postgresql:', 'libsql:'].includes(parsedDatabaseUrl.protocol)) {
+    throw new Error('DATABASE_URL protocol must be postgresql:// or libsql://');
   }
 }
 
