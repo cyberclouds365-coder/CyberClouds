@@ -1058,12 +1058,13 @@ app.post('/api/auth/login', loginIpLimiter, loginLimiter, async (request, respon
 
 app.post('/api/auth/forgot-password', passwordResetRequestLimiter, async (request, response, next) => {
   const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : '';
+  const unavailableEmailMessage = 'This email address is invalid or not available.';
   if (!isValidEmail(email)) {
-    return response.status(400).json({ error: 'Enter a valid email address' });
+    return response.status(400).json({ error: unavailableEmailMessage });
   }
   try {
     const account = await findUserByEmail(email);
-    if (!account) return response.status(404).json({ error: 'Email not available.' });
+    if (!account) return response.status(404).json({ error: unavailableEmailMessage });
     if (!account.is_active) return response.status(403).json({ error: 'This account is inactive. Contact an administrator.' });
     const code = String(randomInt(100000, 1000000));
     const otpHash = await storePasswordResetCode(email, code);
