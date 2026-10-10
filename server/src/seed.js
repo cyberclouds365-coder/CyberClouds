@@ -8,7 +8,7 @@ import { initializeSqliteSchema } from './sqliteSchema.js';
 const serverDir = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: `${serverDir}/../../.env` });
 
-const databaseUrl = process.env.TURSO_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
+const databaseUrl = process.env.TURSO_DATABASE_URL?.trim();
 const authToken = process.env.TURSO_AUTH_TOKEN?.trim();
 if (!databaseUrl) throw new Error('Set TURSO_DATABASE_URL before initializing the Turso database.');
 if (databaseUrl.startsWith('libsql://') && !authToken) throw new Error('Set TURSO_AUTH_TOKEN for the Turso database.');

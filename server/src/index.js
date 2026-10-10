@@ -13,6 +13,7 @@ import nodemailer from 'nodemailer';
 import { createClient } from '@libsql/client';
 import multer from 'multer';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { ensureConfiguredAdministrator } from './adminAccount.js';
 import { initializeSqliteSchema } from './sqliteSchema.js';
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
@@ -37,7 +38,7 @@ const port = Number(process.env.PORT || 3000);
 const productionMode = process.env.NODE_ENV === 'production';
 
 // Turso Database Variables
-const databaseUrl = process.env.TURSO_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
+const databaseUrl = process.env.TURSO_DATABASE_URL?.trim();
 const authToken = process.env.TURSO_AUTH_TOKEN?.trim();
 
 const libsql = databaseUrl ? createClient({ url: databaseUrl, authToken: authToken }) : null;
@@ -1833,7 +1834,7 @@ async function start() {
   if (production) {
     const required = ['JWT_SECRET', 'APP_URL', 'BREVO_SMTP_HOST', 'BREVO_SMTP_PORT', 'BREVO_SMTP_USER', 'BREVO_SMTP_PASS', 'MAIL_FROM', 'TURSO_AUTH_TOKEN'];
     const missing = required.filter((key) => !process.env[key]?.trim());
-    if (!databaseUrl) missing.unshift('TURSO_DATABASE_URL (or DATABASE_URL)');
+    if (!databaseUrl) missing.unshift('TURSO_DATABASE_URL');
     if (missing.length) throw new Error(`Missing required production environment variable(s): ${missing.join(', ')}`);
     if (process.env.JWT_SECRET.length < 64) throw new Error('JWT_SECRET must contain at least 64 characters in production');
     let appUrl;
