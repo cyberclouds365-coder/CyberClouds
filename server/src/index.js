@@ -13,6 +13,7 @@ import nodemailer from 'nodemailer';
 import { createClient } from '@libsql/client';
 import multer from 'multer';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { initializeSqliteSchema } from './sqliteSchema.js';
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(serverDir, '../../.env') });
@@ -36,78 +37,85 @@ const port = Number(process.env.PORT || 3000);
 const productionMode = process.env.NODE_ENV === 'production';
 
 // Turso Database Variables
-const databaseUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
-const authToken = process.env.TURSO_AUTH_TOKEN;
+const databaseUrl = process.env.TURSO_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
+const authToken = process.env.TURSO_AUTH_TOKEN?.trim();
 
 const libsql = databaseUrl ? createClient({ url: databaseUrl, authToken: authToken }) : null;
 
-// ✨ POSTGRESQL TO TURSO AUTO-CONVERSION WRAPPER ✨
+function adaptSqlForLibsql(sql) {
+  let adaptedSql = sql
+    .replace(/LEFT JOIN LATERAL\s*\(\s*SELECT[\s\S]*?FROM app_users WHERE referred_by_user_id = account\.id AND role = 'user'\s*\)\s*stats ON TRUE/gi,
+      "LEFT JOIN (SELECT referred_by_user_id, COUNT(*) AS registrations, SUM(CASE WHEN login_count > 0 THEN 1 ELSE 0 END) AS logins, SUM(CASE WHEN payment_done = TRUE THEN 1 ELSE 0 END) AS purchases FROM app_users WHERE role = 'user' GROUP BY referred_by_user_id) stats ON stats.referred_by_user_id = account.id")
+    .replace(/LEFT JOIN LATERAL\s*\(\s*SELECT[\s\S]*?FROM signup_verifications\s*WHERE referred_by_user_id = account\.id AND expires_at > NOW\(\)\s*\)\s*pending ON TRUE/gi,
+      "LEFT JOIN (SELECT referred_by_user_id, COUNT(*) AS pending_uses FROM signup_verifications WHERE referred_by_user_id IS NOT NULL AND julianday(expires_at) > julianday('now') GROUP BY referred_by_user_id) pending ON pending.referred_by_user_id = account.id")
+    .replace(/([\w.]+)\s*(<=|>=|<|>)\s*NOW\(\)\s*-\s*INTERVAL\s*'([^']+)'/gi,
+      (_match, column, operator, interval) => `julianday(${column}) ${operator} julianday('now', '-${interval}')`)
+    .replace(/([\w.]+)\s*(<=|>=|<|>)\s*NOW\(\)/gi,
+      (_match, column, operator) => `julianday(${column}) ${operator} julianday('now')`)
+    .replace(/\$(\d+)/g, '?$1')
+    .replace(/NOW\(\)/gi, 'CURRENT_TIMESTAMP')
+    .replace(/::int\b/gi, '')
+    .replace(/FOR UPDATE\b/gi, '')
+    .replace(/COUNT\(\*\)\s*FILTER\s*\(\s*WHERE\s*(.*?)\s*\)/gi, 'SUM(CASE WHEN $1 THEN 1 ELSE 0 END)')
+    .replace(/COUNT\((.*?)\)\s*FILTER\s*\(\s*WHERE\s*(.*?)\s*\)/gi, 'SUM(CASE WHEN $2 THEN 1 ELSE 0 END)');
+  return adaptedSql;
+}
+
+function adaptLibsqlParams(params) {
+  return params.map((value) => {
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    if (Array.isArray(value)) return JSON.stringify(value);
+    return value;
+  });
+}
+
+function normalizeLibsqlRows(rows) {
+  return rows.map((row) => {
+    const normalized = { ...row };
+    for (const field of ['is_active', 'payment_done', 'referral_rewarded', 'payment_confirmation_email_sent']) {
+      if (field in normalized) {
+        const value = normalized[field];
+        normalized[field] = value === 1 || value === '1' || value === true || value === 'true';
+      }
+    }
+    return normalized;
+  });
+}
+
+async function executeLibsql(client, sql, params = []) {
+  const result = await client.execute({ sql: adaptSqlForLibsql(sql), args: adaptLibsqlParams(params) });
+  const rows = normalizeLibsqlRows(result.rows);
+  return { rows, rowCount: result.rowsAffected || rows.length };
+}
+
+// PostgreSQL query compatibility adapter for Turso/libSQL.
 const pool = libsql ? {
   query: async (text, params = []) => {
-    let sql = text.replace(/\$(\d+)/g, '?$1');
-    sql = sql.replace(/NOW\(\)/gi, "CURRENT_TIMESTAMP");
-    sql = sql.replace(/CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'5 minutes'/gi, "DATETIME('now', '-5 minutes')");
-    sql = sql.replace(/CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'1 minute'/gi, "DATETIME('now', '-1 minute')");
-    sql = sql.replace(/::int/gi, "");
-    sql = sql.replace(/FOR UPDATE/gi, "");
-
-    if (sql.includes('LEFT JOIN LATERAL')) {
-        sql = sql.replace(/LEFT JOIN LATERAL\s*\(\s*SELECT[\s\S]*?FROM app_users WHERE referred_by_user_id = account\.id AND role = 'user'\s*\)\s*stats ON TRUE/gi,
-        "LEFT JOIN (SELECT referred_by_user_id, COUNT(*) AS registrations, SUM(CASE WHEN login_count > 0 THEN 1 ELSE 0 END) AS logins, SUM(CASE WHEN payment_done = TRUE THEN 1 ELSE 0 END) AS purchases FROM app_users WHERE role = 'user' GROUP BY referred_by_user_id) stats ON stats.referred_by_user_id = account.id");
-
-        sql = sql.replace(/LEFT JOIN LATERAL\s*\(\s*SELECT[\s\S]*?FROM signup_verifications\s*WHERE referred_by_user_id = account\.id AND expires_at > CURRENT_TIMESTAMP\s*\)\s*pending ON TRUE/gi,
-        "LEFT JOIN (SELECT referred_by_user_id, COUNT(*) AS pending_uses FROM signup_verifications WHERE expires_at > CURRENT_TIMESTAMP GROUP BY referred_by_user_id) pending ON pending.referred_by_user_id = account.id");
-    }
-
-    sql = sql.replace(/COUNT\(\*\)\s*FILTER\s*\(\s*WHERE\s*(.*?)\s*\)/gi, "SUM(CASE WHEN $1 THEN 1 ELSE 0 END)");
-    sql = sql.replace(/COUNT\((.*?)\)\s*FILTER\s*\(\s*WHERE\s*(.*?)\s*\)/gi, "SUM(CASE WHEN $2 THEN 1 ELSE 0 END)");
-
     try {
-        const rs = await libsql.execute({ sql, args: params });
-        const rows = rs.rows.map(row => {
-            let newRow = { ...row };
-            ['is_active', 'payment_done', 'referral_rewarded', 'payment_confirmation_email_sent'].forEach(field => {
-                if (field in newRow) newRow[field] = Boolean(newRow[field]);
-            });
-            return newRow;
-        });
-        return { rows, rowCount: rs.rowsAffected || rows.length };
+      return await executeLibsql(libsql, text, params);
     } catch (e) {
-        if (e.message && e.message.includes('UNIQUE constraint failed')) e.code = '23505';
-        throw e;
+      if (e.message?.includes('UNIQUE constraint failed')) e.code = '23505';
+      throw e;
     }
   },
   connect: async () => {
     const trx = await libsql.transaction('write');
     return {
-        query: async (text, params = []) => {
-            let sql = text.replace(/\$(\d+)/g, '?$1');
-            sql = sql.replace(/NOW\(\)/gi, "CURRENT_TIMESTAMP");
-            sql = sql.replace(/CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'5 minutes'/gi, "DATETIME('now', '-5 minutes')");
-            sql = sql.replace(/CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'1 minute'/gi, "DATETIME('now', '-1 minute')");
-            sql = sql.replace(/::int/gi, "");
-            sql = sql.replace(/FOR UPDATE/gi, "");
+      query: async (text, params = []) => {
+        const normalizedSql = text.trim().toUpperCase();
+        if (normalizedSql === 'BEGIN') return;
+        if (normalizedSql === 'COMMIT') return await trx.commit();
+        if (normalizedSql === 'ROLLBACK') return await trx.rollback();
 
-            if (sql.trim().toUpperCase() === 'BEGIN') return;
-            if (sql.trim().toUpperCase() === 'COMMIT') return await trx.commit();
-            if (sql.trim().toUpperCase() === 'ROLLBACK') return await trx.rollback();
-
-            try {
-                const rs = await trx.execute({ sql, args: params });
-                const rows = rs.rows.map(row => {
-                    let newRow = { ...row };
-                    ['is_active', 'payment_done', 'referral_rewarded', 'payment_confirmation_email_sent'].forEach(field => {
-                        if (field in newRow) newRow[field] = Boolean(newRow[field]);
-                    });
-                    return newRow;
-                });
-                return { rows, rowCount: rs.rowsAffected || rows.length };
-            } catch (e) {
-                if (e.message && e.message.includes('UNIQUE constraint failed')) e.code = '23505';
-                throw e;
-            }
-        },
-        release: () => trx.close()
+        try {
+          return await executeLibsql(trx, text, params);
+        } catch (e) {
+          if (e.message?.includes('UNIQUE constraint failed')) e.code = '23505';
+          throw e;
+        }
+      },
+      release: () => trx.close()
     };
   }
 } : null;
@@ -144,20 +152,19 @@ app.post('/api/upload', requireAuth, upload.single('myFile'), async (request, re
 
 function validateDatabaseUrl(value) {
   if (!value) return;
-  // Turso ke libsql:// URL ko allow karne ke liye yeh check lagaya hai
-  if (value.startsWith('libsql://')) return;
-  
   let parsedDatabaseUrl;
   try {
     parsedDatabaseUrl = new URL(value);
   } catch {
-    throw new Error('DATABASE_URL must be a valid PostgreSQL or Turso URL.');
+    throw new Error('Set TURSO_DATABASE_URL to a valid Turso URL, such as libsql://your-database-your-org.turso.io');
   }
-  if (!['postgres:', 'postgresql:', 'libsql:'].includes(parsedDatabaseUrl.protocol)) {
-    throw new Error('DATABASE_URL protocol must be postgresql:// or libsql://');
+  if (!['libsql:', 'https:', 'http:', 'wss:', 'ws:', 'file:'].includes(parsedDatabaseUrl.protocol)) {
+    throw new Error('TURSO_DATABASE_URL must use libsql:// or https://');
+  }
+  if (productionMode && parsedDatabaseUrl.protocol === 'file:') {
+    throw new Error('Use a remote Turso URL in production; local file databases are not persistent on Render.');
   }
 }
-
 
 const signupSecret = process.env.JWT_SECRET || randomBytes(48).toString('hex');
 const cookieName = productionMode ? '__Host-fieldnotes_session' : 'fieldnotes_session';
@@ -1824,8 +1831,9 @@ async function start() {
   if (!isValidEmail(adminEmail)) throw new Error('Set a real, valid ADMIN_EMAIL');
   if (!isStrongPassword(adminPassword)) throw new Error('Set a strong ADMIN_PASSWORD with uppercase, lowercase, a number, and a special character');
   if (production) {
-    const required = ['DATABASE_URL', 'JWT_SECRET', 'APP_URL', 'BREVO_SMTP_HOST', 'BREVO_SMTP_PORT', 'BREVO_SMTP_USER', 'BREVO_SMTP_PASS', 'MAIL_FROM'];
+    const required = ['JWT_SECRET', 'APP_URL', 'BREVO_SMTP_HOST', 'BREVO_SMTP_PORT', 'BREVO_SMTP_USER', 'BREVO_SMTP_PASS', 'MAIL_FROM', 'TURSO_AUTH_TOKEN'];
     const missing = required.filter((key) => !process.env[key]?.trim());
+    if (!databaseUrl) missing.unshift('TURSO_DATABASE_URL (or DATABASE_URL)');
     if (missing.length) throw new Error(`Missing required production environment variable(s): ${missing.join(', ')}`);
     if (process.env.JWT_SECRET.length < 64) throw new Error('JWT_SECRET must contain at least 64 characters in production');
     let appUrl;
@@ -1835,10 +1843,10 @@ async function start() {
     allowedClientOrigins.add(appUrl.origin);
     if (!hasEmailSettings()) throw new Error('Email delivery configuration is incomplete');
   }
-  if (production && !databaseUrl) throw new Error('DATABASE_URL is required in production; in-memory storage is only for local preview');
+  if (production && !databaseUrl) throw new Error('TURSO_DATABASE_URL is required in production; in-memory storage is only for local preview');
   validateDatabaseUrl(databaseUrl);
   if (pool) {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await initializeSqliteSchema(pool);
     for (const [index, category] of categories.entries()) {
       await pool.query(`INSERT INTO categories (slug, name, color, sort_order) VALUES ($1, $2, 'blue', $3)
         ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, color = EXCLUDED.color, sort_order = EXCLUDED.sort_order`, [category.slug, category.name, index + 1]);
@@ -1852,7 +1860,7 @@ async function start() {
     await initializeContent();
     const passwordHash = await bcrypt.hash(adminPassword, 12);
     memoryUsers.push({ id: nextMemoryUserId++, name: 'Site Administrator', email: adminEmail, password_hash: passwordHash, role: 'admin', is_active: true, payment_done: false, referral_code: await createReferralCode(), referral_rewarded: false });
-    console.warn('PostgreSQL is not configured. Accounts use temporary in-memory storage for local preview.');
+    console.warn('Turso is not configured. Accounts use temporary in-memory storage for local preview.');
   }
 
   const server = app.listen(port, '0.0.0.0', () => console.log(`Fieldnotes API listening on http://0.0.0.0:${port}`));

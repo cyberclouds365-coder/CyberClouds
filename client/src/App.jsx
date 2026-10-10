@@ -36,7 +36,7 @@ function LegalPage({ kind, onNavigate, signedIn }) {
       'Passwords are hashed with bcrypt. Session identifiers and one-time codes are stored as hashes. Production traffic is served over HTTPS; database encryption at rest depends on the configured database provider.',
     ] },
     { title: 'Email, hosting, and other providers', paragraphs: [
-      'Transactional email is sent through Brevo. The site and API may be hosted by Netlify and Render, with account data held in the configured PostgreSQL service. Google Fonts and Google AdSense are used on the public site; those providers may receive browser, device, and network information when their resources load.',
+      'Transactional email is sent through Brevo. The site and API may be hosted by Netlify and Render, with account data held in the configured Turso database. Google Fonts and Google AdSense are used on the public site; those providers may receive browser, device, and network information when their resources load.',
       'These providers process information to deliver their services under their own terms and privacy notices. CyberClouds does not sell account information.',
     ] },
     { title: 'Cookies and sessions', paragraphs: [

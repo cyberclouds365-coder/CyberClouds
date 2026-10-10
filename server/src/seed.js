@@ -1,19 +1,31 @@
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
-import pg from 'pg';
-import { readFile } from 'node:fs/promises';
+import { createClient } from '@libsql/client';
 import { ensureConfiguredAdministrator } from './adminAccount.js';
+import { initializeSqliteSchema } from './sqliteSchema.js';
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: join(serverDir, '../../.env') });
+dotenv.config({ path: `${serverDir}/../../.env` });
 
-if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL is required to initialize PostgreSQL.');
-  process.exit(1);
-}
+const databaseUrl = process.env.TURSO_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
+const authToken = process.env.TURSO_AUTH_TOKEN?.trim();
+if (!databaseUrl) throw new Error('Set TURSO_DATABASE_URL before initializing the Turso database.');
+if (databaseUrl.startsWith('libsql://') && !authToken) throw new Error('Set TURSO_AUTH_TOKEN for the Turso database.');
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const client = createClient({ url: databaseUrl, authToken });
+const pool = {
+  async query(sql, params = []) {
+    const args = params.map((value) => {
+      if (value instanceof Date) return value.toISOString();
+      if (typeof value === 'boolean') return value ? 1 : 0;
+      return value;
+    });
+    const result = await client.execute({ sql: sql.replace(/\$(\d+)/g, '?$1'), args });
+    return { rows: result.rows, rowCount: result.rowsAffected || result.rows.length };
+  },
+};
+
 const categories = [
   ['os', 'Operating Systems'],
   ['networking', 'Networking + Hardware'],
@@ -23,7 +35,7 @@ const categories = [
 ];
 
 try {
-  await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+  await initializeSqliteSchema(pool);
   for (const [index, [slug, name]] of categories.entries()) {
     await pool.query(`INSERT INTO categories (slug, name, color, sort_order) VALUES ($1, $2, 'blue', $3)
       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, color = EXCLUDED.color, sort_order = EXCLUDED.sort_order`, [slug, name, index + 1]);
@@ -35,8 +47,7 @@ try {
   if (!password) throw new Error('Set ADMIN_PASSWORD before creating the administrator.');
 
   const adminResult = await ensureConfiguredAdministrator({ pool, email, password });
-
-  console.log(`Initialized ${categories.length} sections. Administrator: ${email} (${adminResult})`);
+  console.log(`Initialized ${categories.length} sections in Turso. Administrator: ${email} (${adminResult})`);
 } finally {
-  await pool.end();
+  client.close();
 }

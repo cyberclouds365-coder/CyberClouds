@@ -1,18 +1,18 @@
 # CyberClouds
 
-A PERN knowledge library for AWS, cybersecurity/OS, networking/hardware, Keycloak and Linux notes. The React/Vite client runs on Netlify, and the Express/PostgreSQL API runs on Render.
+A React and Express knowledge library for AWS, cybersecurity/OS, networking/hardware, Keycloak and Linux notes. The React/Vite client runs on Netlify, and the Express API uses a Turso/libSQL database on Render.
 
 ## Local setup
 
 Requirements: Node.js 20+ and npm.
 
 1. Install dependencies with `npm install`, `npm install --prefix client`, and `npm install --prefix server`.
-2. Copy `.env.example` to `.env` and enter your own admin email/password and a persistent random server secret. For persistent local data, set `DATABASE_URL` to a PostgreSQL connection URL; leave it blank only for an in-memory preview. Configure your real Brevo SMTP login, key, and verified sender if you want signup and payment emails locally.
+2. Copy `.env.example` to `.env` and enter your own admin email/password and a persistent random server secret. For persistent data, set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` from Turso; leave them blank only for an in-memory preview. Configure your real Brevo SMTP login, key, and verified sender if you want signup and payment emails locally.
 3. Run `npm run dev`; Vite prints the client URL and the API runs on port 3000.
 
-The server creates/updates the schema and imports the supplied library on startup. In-memory accounts disappear when the server restarts. Production startup requires PostgreSQL, the persistent `JWT_SECRET` value (used to protect signup and password-reset verification codes), admin credentials, a public app URL, and complete SMTP settings.
+The server creates/updates the SQLite-compatible schema in Turso and imports the supplied library on startup. In-memory accounts disappear when the server restarts. Production startup requires a Turso URL and auth token, the persistent `JWT_SECRET` value (used to protect signup and password-reset verification codes), admin credentials, a public app URL, and complete SMTP settings.
 
-Sign-in uses random, revocable server-side sessions stored as token hashes in PostgreSQL and sent in an HTTP-only cookie. Production cookies are Secure and host-only; the API only accepts write requests from the configured app origin. Sessions expire after eight hours, and logout or password changes revoke them. Forgot-password verifies the email against the database first: if the address is not registered, the page shows “Email not available.” and no mail is sent. If the account exists and is active, a single-use Brevo code valid for ten minutes is sent and the user continues to the change-password form. Attempts are rate-limited, and a successful reset revokes all sessions. Readers can share referral codes: 10 verified registrations plus one confirmed course purchase unlock the full library free. Signup records acceptance of the Terms and Conditions and Privacy Policy.
+Sign-in uses random, revocable server-side sessions stored as token hashes in Turso and sent in an HTTP-only cookie. Production cookies are Secure and host-only; the API only accepts write requests from the configured app origin. Sessions expire after eight hours, and logout or password changes revoke them. Forgot-password verifies the email against the database first: if the address is not registered, the page shows an unavailable message and no mail is sent. If the account exists and is active, a single-use Brevo code valid for ten minutes is sent and the user continues to the change-password form. Attempts are rate-limited, and a successful reset revokes all sessions. Readers can share referral codes: 10 verified registrations plus one confirmed course purchase unlock the full library free. Signup records acceptance of the Terms and Conditions and Privacy Policy.
 
 ## Deploy to Netlify and Render
 
@@ -29,13 +29,14 @@ Create or update a Render Web Service for this repository with:
 Set these environment variables in the Render service. Use the existing real values from your private `.env` where applicable, and never paste them into Git or chat:
 
 - `NODE_ENV=production`
-- `DATABASE_URL`: your persistent PostgreSQL connection string
+- `TURSO_DATABASE_URL`: the `libsql://...` URL for your Turso database
+- `TURSO_AUTH_TOKEN`: an auth token for that Turso database
 - `JWT_SECRET`: a persistent random server secret of at least 64 characters (generate one with `openssl rand -hex 64`)
 - `ADMIN_EMAIL` and `ADMIN_PASSWORD`: your real administrator credentials
 - `APP_URL`: the public Netlify site origin, such as `https://your-site.netlify.app`
 - `BREVO_SMTP_HOST`, `BREVO_SMTP_PORT`, `BREVO_SMTP_USER`, `BREVO_SMTP_PASS`, `MAIL_FROM`: your real Brevo SMTP settings and verified sender
 
-Render supplies `PORT`; do not hard-code it for production. The health check returns an error if PostgreSQL is unavailable.
+Render supplies `PORT`; do not hard-code it for production. The health check returns an error if Turso is unavailable.
 
 ### Netlify client
 
