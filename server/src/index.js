@@ -10,11 +10,9 @@ import express from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
 import nodemailer from 'nodemailer';
-import pg from 'pg';
 import { createClient } from '@libsql/client';
-
-
-
+import multer from 'multer';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(serverDir, '../../.env') });
@@ -22,42 +20,126 @@ dotenv.config({ path: join(serverDir, '../../.env') });
 const app = express();
 app.set('trust proxy', 1);
 
-
 const allowedClientOrigins = new Set(['http://localhost:5173', 'http://127.0.0.1:5173']);
 if (process.env.APP_URL) {
-  try {
-    allowedClientOrigins.add(new URL(process.env.APP_URL).origin);
-  } catch {
-    // APP_URL is validated for production startup below.
-  }
+  try { allowedClientOrigins.add(new URL(process.env.APP_URL).origin); } catch {}
 }
 app.use(cors({
-  origin(origin, callback) {
-    callback(null, !origin || allowedClientOrigins.has(origin));
-  },
+  origin(origin, callback) { callback(null, !origin || allowedClientOrigins.has(origin)); },
   credentials: true,
 }));
 
-// const port = Number(process.env.PORT || 3000);
-// const databaseUrl = process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim();
-// const productionMode = process.env.NODE_ENV === 'production';
-// const pool = databaseUrl ? new pg.Pool({
-//   connectionString: databaseUrl,
-//   max: 20,
-//   idleTimeoutMillis: 30000,
-//   connectionTimeoutMillis: 10000,
-//   ssl: productionMode || /sslmode=require/i.test(databaseUrl)
-//     ? { rejectUnauthorized: process.env.PG_SSL_REJECT_UNAUTHORIZED !== 'false' }
-//     : undefined,
-// }) : null;
+// =======================================================
+// 🚀 CONFIG & SMART TURSO WRAPPER + B2 UPLOAD SETUP
+// =======================================================
+const port = Number(process.env.PORT || 3000);
+const productionMode = process.env.NODE_ENV === 'production';
 
-const databaseUrl = process.env.DATABASE_URL;
+// Turso Database Variables
+const databaseUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
 
-const pool = databaseUrl ? createClient({
-  url: databaseUrl,
-  authToken: authToken,
-}) : null;
+const libsql = databaseUrl ? createClient({ url: databaseUrl, authToken: authToken }) : null;
+
+// ✨ POSTGRESQL TO TURSO AUTO-CONVERSION WRAPPER ✨
+const pool = libsql ? {
+  query: async (text, params = []) => {
+    let sql = text.replace(/\$(\d+)/g, '?$1');
+    sql = sql.replace(/NOW\(\)/gi, "CURRENT_TIMESTAMP");
+    sql = sql.replace(/CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'5 minutes'/gi, "DATETIME('now', '-5 minutes')");
+    sql = sql.replace(/CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'1 minute'/gi, "DATETIME('now', '-1 minute')");
+    sql = sql.replace(/::int/gi, "");
+    sql = sql.replace(/FOR UPDATE/gi, "");
+
+    if (sql.includes('LEFT JOIN LATERAL')) {
+        sql = sql.replace(/LEFT JOIN LATERAL\s*\(\s*SELECT[\s\S]*?FROM app_users WHERE referred_by_user_id = account\.id AND role = 'user'\s*\)\s*stats ON TRUE/gi,
+        "LEFT JOIN (SELECT referred_by_user_id, COUNT(*) AS registrations, SUM(CASE WHEN login_count > 0 THEN 1 ELSE 0 END) AS logins, SUM(CASE WHEN payment_done = TRUE THEN 1 ELSE 0 END) AS purchases FROM app_users WHERE role = 'user' GROUP BY referred_by_user_id) stats ON stats.referred_by_user_id = account.id");
+
+        sql = sql.replace(/LEFT JOIN LATERAL\s*\(\s*SELECT[\s\S]*?FROM signup_verifications\s*WHERE referred_by_user_id = account\.id AND expires_at > CURRENT_TIMESTAMP\s*\)\s*pending ON TRUE/gi,
+        "LEFT JOIN (SELECT referred_by_user_id, COUNT(*) AS pending_uses FROM signup_verifications WHERE expires_at > CURRENT_TIMESTAMP GROUP BY referred_by_user_id) pending ON pending.referred_by_user_id = account.id");
+    }
+
+    sql = sql.replace(/COUNT\(\*\)\s*FILTER\s*\(\s*WHERE\s*(.*?)\s*\)/gi, "SUM(CASE WHEN $1 THEN 1 ELSE 0 END)");
+    sql = sql.replace(/COUNT\((.*?)\)\s*FILTER\s*\(\s*WHERE\s*(.*?)\s*\)/gi, "SUM(CASE WHEN $2 THEN 1 ELSE 0 END)");
+
+    try {
+        const rs = await libsql.execute({ sql, args: params });
+        const rows = rs.rows.map(row => {
+            let newRow = { ...row };
+            ['is_active', 'payment_done', 'referral_rewarded', 'payment_confirmation_email_sent'].forEach(field => {
+                if (field in newRow) newRow[field] = Boolean(newRow[field]);
+            });
+            return newRow;
+        });
+        return { rows, rowCount: rs.rowsAffected || rows.length };
+    } catch (e) {
+        if (e.message && e.message.includes('UNIQUE constraint failed')) e.code = '23505';
+        throw e;
+    }
+  },
+  connect: async () => {
+    const trx = await libsql.transaction('write');
+    return {
+        query: async (text, params = []) => {
+            let sql = text.replace(/\$(\d+)/g, '?$1');
+            sql = sql.replace(/NOW\(\)/gi, "CURRENT_TIMESTAMP");
+            sql = sql.replace(/CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'5 minutes'/gi, "DATETIME('now', '-5 minutes')");
+            sql = sql.replace(/CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'1 minute'/gi, "DATETIME('now', '-1 minute')");
+            sql = sql.replace(/::int/gi, "");
+            sql = sql.replace(/FOR UPDATE/gi, "");
+
+            if (sql.trim().toUpperCase() === 'BEGIN') return;
+            if (sql.trim().toUpperCase() === 'COMMIT') return await trx.commit();
+            if (sql.trim().toUpperCase() === 'ROLLBACK') return await trx.rollback();
+
+            try {
+                const rs = await trx.execute({ sql, args: params });
+                const rows = rs.rows.map(row => {
+                    let newRow = { ...row };
+                    ['is_active', 'payment_done', 'referral_rewarded', 'payment_confirmation_email_sent'].forEach(field => {
+                        if (field in newRow) newRow[field] = Boolean(newRow[field]);
+                    });
+                    return newRow;
+                });
+                return { rows, rowCount: rs.rowsAffected || rows.length };
+            } catch (e) {
+                if (e.message && e.message.includes('UNIQUE constraint failed')) e.code = '23505';
+                throw e;
+            }
+        },
+        release: () => trx.close()
+    };
+  }
+} : null;
+
+// ==========================================
+// BACKBLAZE B2 UPLOAD SETUP
+// ==========================================
+const s3 = new S3Client({
+  endpoint: process.env.B2_ENDPOINT,
+  region: process.env.B2_REGION,
+  credentials: { accessKeyId: process.env.B2_KEY_ID, secretAccessKey: process.env.B2_APP_KEY },
+});
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.post('/api/upload', requireAuth, upload.single('myFile'), async (request, response) => {
+  try {
+      if (!request.file) return response.status(400).json({ error: "Koi file upload nahi hui" });
+      const fileName = Date.now() + '-' + request.file.originalname;
+      const uploadParams = {
+          Bucket: process.env.B2_BUCKET_NAME,
+          Key: fileName,
+          Body: request.file.buffer,
+          ContentType: request.file.mimetype,
+      };
+      await s3.send(new PutObjectCommand(uploadParams));
+      response.status(200).json({ message: "File successfully uploaded to Backblaze B2! 🎉", fileName });
+  } catch (error) {
+      console.error("Upload Error:", error);
+      response.status(500).json({ error: "File upload fail ho gayi" });
+  }
+});
+
 
 
 function validateDatabaseUrl(value) {
