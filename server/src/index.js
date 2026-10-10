@@ -12,7 +12,9 @@ import helmet from 'helmet';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
 import { ensureConfiguredAdministrator } from './adminAccount.js';
-
+import multer from 'multer';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { ensureConfiguredAdministrator } from './adminAccount.js';
 
 
 const serverDir = dirname(fileURLToPath(import.meta.url));
@@ -49,6 +51,46 @@ const pool = databaseUrl ? new pg.Pool({
     ? { rejectUnauthorized: process.env.PG_SSL_REJECT_UNAUTHORIZED !== 'false' }
     : undefined,
 }) : null;
+
+
+const s3 = new S3Client({
+  endpoint: process.env.B2_ENDPOINT,
+  region: process.env.B2_REGION,
+  credentials: {
+      accessKeyId: process.env.B2_KEY_ID,
+      secretAccessKey: process.env.B2_APP_KEY,
+  },
+});
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Naya API Route Backblaze B2 upload ke liye
+app.post('/api/upload', requireAuth, upload.single('myFile'), async (request, response) => {
+  try {
+      if (!request.file) {
+          return response.status(400).json({ error: "Koi file upload nahi hui" });
+      }
+      
+      const fileName = Date.now() + '-' + request.file.originalname;
+      
+      const uploadParams = {
+          Bucket: process.env.B2_BUCKET_NAME,
+          Key: fileName,
+          Body: request.file.buffer,
+          ContentType: request.file.mimetype,
+      };
+
+      await s3.send(new PutObjectCommand(uploadParams));
+
+      response.status(200).json({
+          message: "File successfully uploaded to Backblaze B2! 🎉",
+          fileName: fileName
+      });
+  } catch (error) {
+      console.error("Upload Error:", error);
+      response.status(500).json({ error: "File upload fail ho gayi" });
+  }
+});
+
 
 function validateDatabaseUrl(value) {
   if (!value) return;
